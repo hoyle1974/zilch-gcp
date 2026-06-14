@@ -148,16 +148,25 @@ resource "google_project_iam_member" "storage" {
 }
 
 # 4. Firebase Authentication Provisioning Engine
-resource "google_firebase_project" "default" {
+# Enable Firebase APIs (Firebase project is created via console, not Terraform)
+resource "google_project_service" "firebase" {
   count   = var.enable_firebase_auth ? 1 : 0
-  project = var.gcp_project_id
+  service = "firebase.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "firebaseauth" {
+  count   = var.enable_firebase_auth ? 1 : 0
+  service = "firebaseauth.googleapis.com"
+  disable_on_destroy = false
 }
 
 resource "google_project_iam_member" "firebase" {
   count   = var.enable_firebase_auth ? 1 : 0
   project = var.gcp_project_id
-  role    = "roles/firebase.admin"
+  role    = "roles/firebase.viewer"
   member  = "serviceAccount:${google_service_account.app.email}"
+  depends_on = [google_project_service.firebase, google_project_service.firebaseauth]
 }
 
 # 5. Vertex AI Engine System Integration
