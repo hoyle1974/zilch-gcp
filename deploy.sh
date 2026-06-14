@@ -207,6 +207,12 @@ if ! gcloud config set project "$PROJECT_ID" --quiet; then
     echo "⚠️  Warning: Could not set gcloud project context."
 fi
 
+# Also set ADC quota project to match (handles Application Default Credentials mismatch)
+if ! gcloud auth application-default set-quota-project "$PROJECT_ID" --quiet 2>/dev/null; then
+    # Not critical if this fails - some ADC setups don't have quota projects
+    true
+fi
+
 # Wait for Terraform-specific global replication
 if [ "$BUCKET_CREATED" = true ]; then
     echo "⏳ Waiting for Terraform backend propagation (3 seconds)..."
