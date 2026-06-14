@@ -152,11 +152,11 @@ if [ "$BUCKET_CREATED" = true ]; then
 
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         # Test 1: Can we list objects?
-        if gcloud storage objects list --bucket="gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
+        if gcloud storage ls "gs://${STATE_BUCKET}/" &>/dev/null 2>&1; then
             # Test 2: Can we write a test file?
-            if echo "test" | gcloud storage objects create gs://${STATE_BUCKET}/test-write --data-file=- &>/dev/null 2>&1; then
+            if echo "test" | gcloud storage cp - "gs://${STATE_BUCKET}/test-write" &>/dev/null 2>&1; then
                 # Test 3: Can we delete it?
-                if gcloud storage objects delete gs://${STATE_BUCKET}/test-write &>/dev/null 2>&1; then
+                if gcloud storage rm "gs://${STATE_BUCKET}/test-write" &>/dev/null 2>&1; then
                     echo "✓ Bucket is accessible and writable"
                     BUCKET_READY=true
                     break
@@ -184,7 +184,7 @@ fi
 # 7. Final pre-flight check before Terraform
 echo ""
 echo "🔐 Final verification before Terraform..."
-TERRAFORM_TEST=$(gcloud storage objects list --bucket="gs://${STATE_BUCKET}" 2>&1)
+TERRAFORM_TEST=$(gcloud storage ls "gs://${STATE_BUCKET}/" 2>&1)
 if [ $? -ne 0 ]; then
     echo "❌ Cannot access state bucket at this moment."
     echo "Error: $TERRAFORM_TEST"

@@ -53,7 +53,7 @@ fi
 
 # 4. Test write
 echo "4️⃣  Testing write to bucket..."
-if echo "test" | gcloud storage objects create "gs://${TEST_BUCKET}/test-write" --data-file=- &>/dev/null; then
+if echo "test" | gcloud storage cp - "gs://${TEST_BUCKET}/test-write" &>/dev/null; then
     echo "   ✓ Write successful"
 else
     echo "   ✗ Write failed"
@@ -63,7 +63,7 @@ fi
 
 # 5. Test read
 echo "5️⃣  Testing read from bucket..."
-if gcloud storage objects list --bucket="gs://${TEST_BUCKET}" &>/dev/null; then
+if gcloud storage ls "gs://${TEST_BUCKET}/" &>/dev/null; then
     echo "   ✓ Read successful"
 else
     echo "   ✗ Read failed"
@@ -108,7 +108,8 @@ fi
 echo ""
 echo "7️⃣  Cleaning up..."
 cd /
-rm -rf /tmp/tf-test .terraform .terraform.lock.hcl
+rm -rf /tmp/tf-test
+gcloud storage rm "gs://${TEST_BUCKET}/test-write" --quiet || true
 gcloud storage buckets delete "gs://${TEST_BUCKET}" --quiet
 echo "   ✓ Cleanup complete"
 
