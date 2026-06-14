@@ -48,6 +48,7 @@ zilch-gcp/
 ├── main.tf                                # Core infrastructure + all service toggles
 ├── variables.tf                           # Input variable definitions + validation
 ├── outputs.tf                             # Terraform outputs (URLs, resource IDs)
+├── backend.tf                             # Terraform backend config (remote state in Cloud Storage)
 ├── terraform.tfvars.example               # Reference template (never committed)
 ├── .gitignore                             # Ignore .tfvars, .terraform/, state files
 ├── .github/workflows/validate.yml         # Optional: pre-commit Terraform linting
@@ -83,8 +84,13 @@ zilch-gcp/
 │  ├─ "Enable Vertex AI? (y/n)" → TF_VAR_enable_vertex_ai
 │  ├─ "Enable Cloud Storage? (y/n)" → TF_VAR_enable_cloud_storage
 │  └─ "Enable Firebase Auth? (y/n)" → TF_VAR_enable_firebase_auth
+├─ State Bucket Bootstrap
+│  ├─ Check if state bucket exists: gs://${PROJECT_ID}-zilch-tfstate
+│  ├─ If not: gcloud storage buckets create gs://${PROJECT_ID}-zilch-tfstate --location=$REGION
+│  └─ (Non-backend engineers don't manually create buckets; deploy.sh handles it)
 ├─ Terraform
-│  ├─ Run: terraform init
+│  ├─ Run: terraform init -backend-config="bucket=${PROJECT_ID}-zilch-tfstate"
+│  │        (initializes with remote state backend pointing to the bootstrap bucket)
 │  ├─ Run: terraform apply -auto-approve \
 │  │        -var="gcp_project_id=$PROJECT_ID" \
 │  │        -var="app_name=$APP_NAME" \
@@ -116,11 +122,39 @@ zilch-gcp/
 
 ---
 
-## 5. Terraform Configuration (`main.tf` & `variables.tf`)
+## 5. Terraform Configuration (`main.tf`, `variables.tf` & `backend.tf`)
+
+### Backend Configuration (`backend.tf`)
+
+The state bucket is created by `deploy.sh` before Terraform runs. The backend config is initialized dynamically at runtime:
+
+```hcl
+terraform {
+  backend "gcs" {
+    # Bucket name is passed via -backend-config flag in deploy.sh
+    # Example: terraform init -backend-config="bucket=my-project-zilch-tfstate"
+  }
+}
+```
+
+This approach avoids hardcoding bucket names and supports multi-user/multi-project setups.
 
 ### Core Resources (Always Provisioned)
 
 ```hcl
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+}
+
 # Provider
 provider "google" {
   project = var.gcp_project_id
@@ -180,10 +214,12 @@ resource "google_cloud_run_service_iam_member" "public" {
 
 #### Firestore
 ```hcl
+# Note: Free tier only supports the "(default)" database ID.
+# Additional named databases incur hourly fees.
 resource "google_firestore_database" "default" {
   count    = var.enable_firestore ? 1 : 0
   project  = var.gcp_project_id
-  name     = var.app_name
+  name     = "(default)"
   location = var.gcp_region
   type     = "FIRESTORE_NATIVE"
 }
@@ -223,10 +259,15 @@ resource "google_project_iam_member" "secret_manager" {
 
 #### Cloud Storage
 ```hcl
+# Generate a random suffix to ensure globally unique bucket names
+resource "random_id" "bucket_suffix" {
+  byte_length = 4
+}
+
 resource "google_storage_bucket" "app" {
   count         = var.enable_cloud_storage ? 1 : 0
   project       = var.gcp_project_id
-  name          = "${var.app_name}-storage-${data.google_client_config.current.project}"
+  name          = "${var.app_name}-storage-${random_id.bucket_suffix.hex}"
   location      = var.gcp_region
   force_destroy = true
 }
@@ -272,34 +313,50 @@ resource "google_project_iam_member" "vertex_ai" {
 
 ### Dynamic Environment Variables
 
-The Cloud Run service should inject conditional env vars based on enabled services:
+The Cloud Run service injects conditional env vars using deterministic naming (no circular dependencies on resource outputs):
 
 ```hcl
-# Pseudo-code logic for main.tf:
-locals {
-  env_vars = merge(
-    {
-      "ZILCH_PROJECT_ID" = var.gcp_project_id
-      "ZILCH_APP_NAME" = var.app_name
-    },
-    var.enable_firestore ? {
-      "ZILCH_FIRESTORE_DATABASE" = google_firestore_database.default[0].name
-    } : {},
-    var.enable_secret_manager ? {
-      "ZILCH_SECRET_PREFIX" = "${var.app_name}-"
-    } : {},
-    var.enable_cloud_storage ? {
-      "ZILCH_STORAGE_BUCKET" = google_storage_bucket.app[0].name
-    } : {},
-    var.enable_vertex_ai ? {
-      "ZILCH_VERTEX_AI_ENABLED" = "true"
-    } : {},
-    var.enable_firebase_auth ? {
-      "ZILCH_FIREBASE_ENABLED" = "true"
-    } : {}
-  )
+# In google_cloud_run_service template.spec.containers block:
+
+# Always-present env vars
+env {
+  name  = "ZILCH_PROJECT_ID"
+  value = var.gcp_project_id
+}
+
+env {
+  name  = "ZILCH_APP_NAME"
+  value = var.app_name
+}
+
+# Conditional env vars (use ternary operators on variables only, not resource outputs)
+env {
+  name  = "ZILCH_FIRESTORE_DATABASE"
+  value = var.enable_firestore ? "(default)" : ""
+}
+
+env {
+  name  = "ZILCH_SECRET_PREFIX"
+  value = var.enable_secret_manager ? "${var.app_name}-" : ""
+}
+
+env {
+  name  = "ZILCH_STORAGE_BUCKET"
+  value = var.enable_cloud_storage ? "${var.app_name}-storage-${random_id.bucket_suffix.hex}" : ""
+}
+
+env {
+  name  = "ZILCH_VERTEX_AI_ENABLED"
+  value = var.enable_vertex_ai ? "true" : ""
+}
+
+env {
+  name  = "ZILCH_FIREBASE_ENABLED"
+  value = var.enable_firebase_auth ? "true" : ""
 }
 ```
+
+**Design rationale:** Each env var is computed from input variables only (using ternary operators), not from resource outputs. This avoids circular dependencies and ensures the Cloud Run service can build its environment block deterministically before resources are created.
 
 ### Variables File (`variables.tf`)
 
@@ -429,6 +486,7 @@ output "app_name" {
 - Deploying your own code (gcloud run deploy)
 - Accessing services from your app (code snippets)
 - Monitoring & logs (gcloud run logs)
+- **If Firebase Auth enabled:** Direct link to Firebase Console for configuring providers (Email, Google, etc.): `https://console.firebase.google.com/project/${PROJECT_ID}/authentication`
 
 ---
 
