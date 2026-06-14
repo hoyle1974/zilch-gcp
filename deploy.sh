@@ -113,28 +113,32 @@ VERTEX=$(prompt_toggle "Vertex AI Gemini Platform")
 
 # 6. Automate State Bucket Isolation (The Bootstrap)
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
-CURRENT_USER=$(gcloud config get-value account)
 echo ""
 echo "📦 Setting up remote state bucket..."
 
-# Check if bucket exists
-if ! gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null; then
-    echo "🛠️ Creating state bucket 'gs://${STATE_BUCKET}'..."
-
-    # Create bucket
-    if ! gcloud storage buckets create "gs://${STATE_BUCKET}" \
-        --project="$PROJECT_ID" \
-        --location="$REGION" \
-        --uniform-bucket-level-access; then
-        echo "❌ Failed to create state bucket. You may need Storage Admin permissions."
-        echo "Run this to grant yourself permissions:"
-        echo "  gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:${CURRENT_USER} --role=roles/storage.admin"
+# Always attempt to create the bucket (idempotent: succeeds if exists, fails only on real errors)
+if gcloud storage buckets create "gs://${STATE_BUCKET}" \
+    --project="$PROJECT_ID" \
+    --location="$REGION" \
+    --uniform-bucket-level-access \
+    &>/dev/null 2>&1; then
+    echo "🛠️ Created new state bucket: gs://${STATE_BUCKET}"
+else
+    # Verify bucket actually exists before proceeding
+    if gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
+        echo "✓ Using existing state bucket: gs://${STATE_BUCKET}"
+    else
+        echo "❌ Failed to create or access state bucket 'gs://${STATE_BUCKET}'."
+        echo ""
+        echo "Possible issues:"
+        echo "  • Missing Cloud Storage permissions (you need Editor or Owner role)"
+        echo "  • Bucket name already taken (try a different project ID)"
+        echo "  • Organization policy restricting Cloud Storage"
+        echo ""
+        echo "Run this to verify permissions:"
+        echo "  gcloud projects get-iam-policy ${PROJECT_ID} --flatten='bindings[].members' --filter='bindings.members:user:*'"
         exit 1
     fi
-
-    echo "✓ State bucket ready"
-else
-    echo "✓ State bucket exists (reusing)"
 fi
 
 # 7. Terraform Execution Execution Lifecycle
