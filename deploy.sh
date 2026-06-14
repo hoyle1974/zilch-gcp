@@ -117,12 +117,14 @@ echo ""
 echo "📦 Setting up remote state bucket..."
 
 # Always attempt to create the bucket (idempotent: succeeds if exists, fails only on real errors)
+BUCKET_CREATED=false
 if gcloud storage buckets create "gs://${STATE_BUCKET}" \
     --project="$PROJECT_ID" \
     --location="$REGION" \
     --uniform-bucket-level-access \
     &>/dev/null 2>&1; then
     echo "🛠️ Created new state bucket: gs://${STATE_BUCKET}"
+    BUCKET_CREATED=true
 else
     # Verify bucket actually exists before proceeding
     if gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
@@ -141,9 +143,33 @@ else
     fi
 fi
 
+# Wait for bucket to be globally available (eventual consistency)
+if [ "$BUCKET_CREATED" = true ]; then
+    echo "⏳ Waiting for bucket to be globally available..."
+    RETRY_COUNT=0
+    MAX_RETRIES=10
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        if gcloud storage objects list --bucket="gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
+            echo "✓ Bucket is accessible"
+            break
+        fi
+        RETRY_COUNT=$((RETRY_COUNT+1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            sleep 1
+        fi
+    done
+    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+        echo "⚠️  Bucket creation may not have fully propagated. Proceeding anyway..."
+    fi
+fi
+
 # 7. Terraform Execution Execution Lifecycle
 echo "🚀 Initializing Terraform modules over secure remote state..."
-if ! terraform init -backend-config="bucket=${STATE_BUCKET}" -reconfigure; then
+if ! terraform init \
+    -backend-config="bucket=${STATE_BUCKET}" \
+    -backend-config="project=${PROJECT_ID}" \
+    -backend-config="prefix=terraform/state" \
+    -reconfigure; then
     echo "❌ Terraform init failed. Common causes:"
     echo "   • Missing IAM permissions (you may need Editor or Owner role)"
     echo "   • State bucket exists but you don't have access (contact project admin)"
