@@ -200,9 +200,15 @@ if [ $? -ne 0 ]; then
 fi
 echo "✓ State bucket verified"
 
+# Set gcloud context to the correct project (required for Terraform ADC)
+echo ""
+echo "🔧 Configuring gcloud context for Terraform..."
+if ! gcloud config set project "$PROJECT_ID" --quiet; then
+    echo "⚠️  Warning: Could not set gcloud project context."
+fi
+
 # Wait for Terraform-specific global replication
 if [ "$BUCKET_CREATED" = true ]; then
-    echo ""
     echo "⏳ Waiting for Terraform backend propagation (3 seconds)..."
     sleep 3
 fi
