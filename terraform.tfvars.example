@@ -1,0 +1,12 @@
+# This file is an EXAMPLE of what a terraform.tfvars file looks like.
+# DO NOT commit this file to git if you add real values.
+# Instead, use the deploy.sh script which passes values via -var flags.
+
+gcp_project_id         = "my-gcp-project"
+app_name               = "my-awesome-app"
+gcp_region             = "us-central1"
+enable_firestore       = false
+enable_secret_manager  = false
+enable_vertex_ai       = false
+enable_cloud_storage   = false
+enable_firebase_auth   = false
