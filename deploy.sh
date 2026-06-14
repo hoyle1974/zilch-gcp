@@ -143,40 +143,83 @@ else
     fi
 fi
 
-# Wait for bucket to be globally available (eventual consistency)
+# Wait and verify bucket is accessible (handle eventual consistency)
 if [ "$BUCKET_CREATED" = true ]; then
     echo "⏳ Waiting for bucket to be globally available..."
     RETRY_COUNT=0
-    MAX_RETRIES=10
+    MAX_RETRIES=15
+    BUCKET_READY=false
+
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        # Test 1: Can we list objects?
         if gcloud storage objects list --bucket="gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
-            echo "✓ Bucket is accessible"
-            break
+            # Test 2: Can we write a test file?
+            if echo "test" | gcloud storage objects create gs://${STATE_BUCKET}/test-write --data-file=- &>/dev/null 2>&1; then
+                # Test 3: Can we delete it?
+                if gcloud storage objects delete gs://${STATE_BUCKET}/test-write &>/dev/null 2>&1; then
+                    echo "✓ Bucket is accessible and writable"
+                    BUCKET_READY=true
+                    break
+                fi
+            fi
         fi
         RETRY_COUNT=$((RETRY_COUNT+1))
         if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "  Attempt $RETRY_COUNT/$MAX_RETRIES... waiting"
             sleep 1
         fi
     done
-    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-        echo "⚠️  Bucket creation may not have fully propagated. Proceeding anyway..."
+
+    if [ "$BUCKET_READY" = false ]; then
+        echo "❌ Bucket was created but is not accessible or writable after $MAX_RETRIES seconds."
+        echo ""
+        echo "Debugging:"
+        echo "  1. Check bucket exists: gcloud storage buckets describe gs://${STATE_BUCKET}"
+        echo "  2. Check your permissions: gcloud projects get-iam-policy ${PROJECT_ID} --flatten='bindings[].members' --filter='bindings.members:user:*'"
+        echo "  3. Check for org policies: gcloud resource-manager org-policies list --project=${PROJECT_ID}"
+        exit 1
     fi
 fi
 
-# 7. Terraform Execution Execution Lifecycle
+# 7. Final pre-flight check before Terraform
+echo ""
+echo "🔐 Final verification before Terraform..."
+TERRAFORM_TEST=$(gcloud storage objects list --bucket="gs://${STATE_BUCKET}" 2>&1)
+if [ $? -ne 0 ]; then
+    echo "❌ Cannot access state bucket at this moment."
+    echo "Error: $TERRAFORM_TEST"
+    echo ""
+    echo "This may be:"
+    echo "  • Organization policy blocking Cloud Storage access"
+    echo "  • VPC-SC restrictions"
+    echo "  • Project-level Cloud Storage API disabled"
+    echo ""
+    echo "Try manually verifying bucket access:"
+    echo "  gcloud storage buckets describe gs://${STATE_BUCKET}"
+    exit 1
+fi
+echo "✓ State bucket verified"
+
+# 8. Terraform Execution Execution Lifecycle
+echo ""
 echo "🚀 Initializing Terraform modules over secure remote state..."
 if ! terraform init \
     -backend-config="bucket=${STATE_BUCKET}" \
     -backend-config="project=${PROJECT_ID}" \
     -backend-config="prefix=terraform/state" \
     -reconfigure; then
-    echo "❌ Terraform init failed. Common causes:"
-    echo "   • Missing IAM permissions (you may need Editor or Owner role)"
-    echo "   • State bucket exists but you don't have access (contact project admin)"
-    echo "   • Organization policy restricting Cloud Storage or Terraform"
+    echo "❌ Terraform init failed."
     echo ""
-    echo "To grant yourself permissions, run:"
-    echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} --member=user:${CURRENT_USER} --role=roles/editor"
+    echo "The state bucket exists and is accessible, but Terraform init still failed."
+    echo "This usually means:"
+    echo "  • Terraform files have syntax errors (run: terraform validate)"
+    echo "  • Missing or incompatible provider versions"
+    echo "  • Backend configuration issue"
+    echo ""
+    echo "For debugging:"
+    echo "  1. Run: terraform validate"
+    echo "  2. Check for Terraform syntax errors in *.tf files"
+    echo "  3. Try: terraform init -upgrade"
     exit 1
 fi
 
