@@ -35,17 +35,25 @@ echo "🔍 Verifying IAM permissions for ${CURRENT_USER}..."
 # Check for Editor or Owner role (needed for Cloud Run, Firestore, etc.)
 ROLE_CHECK=$(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten="bindings[].members" \
-  --filter="bindings.members:user:${CURRENT_USER} AND (bindings.role:roles/editor OR bindings.role:roles/owner OR bindings.role:roles/compute.admin)" \
+  --filter="bindings.members:user:${CURRENT_USER} AND (bindings.role:roles/editor OR bindings.role:roles/owner)" \
   --format="value(bindings.role)" 2>/dev/null | head -1)
 
 if [ -z "$ROLE_CHECK" ]; then
-    echo "⚠️  Warning: ${CURRENT_USER} may not have sufficient permissions."
-    echo "Zilch requires one of: Editor, Owner, or Cloud Run Admin + Compute Admin roles."
-    read -p "Continue anyway? (y/n): " CONTINUE
-    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
-        echo "Aborted. Please grant yourself the necessary IAM roles and try again."
-        exit 1
-    fi
+    echo "❌ Error: ${CURRENT_USER} does not have Editor or Owner role on project ${PROJECT_ID}."
+    echo ""
+    echo "Zilch requires Editor or Owner role to:"
+    echo "  • Create and manage Cloud Storage buckets"
+    echo "  • Enable Google Cloud APIs"
+    echo "  • Create service accounts and manage IAM"
+    echo ""
+    echo "You need someone with Owner/Editor access to grant you the role. Ask your project admin to run:"
+    echo ""
+    echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} \\"
+    echo "    --member=user:${CURRENT_USER} \\"
+    echo "    --role=roles/editor"
+    echo ""
+    echo "Then try deploy.sh again."
+    exit 1
 fi
 
 # 3. Read App Name with Formatting Validations
@@ -105,13 +113,6 @@ if ! gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null; then
         echo "  gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:${CURRENT_USER} --role=roles/storage.admin"
         exit 1
     fi
-
-    # Grant current user Storage Admin on the project (needed for Terraform state access)
-    echo "🔐 Granting Storage permissions to ${CURRENT_USER}..."
-    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-        --member="user:${CURRENT_USER}" \
-        --role="roles/storage.admin" \
-        --quiet 2>/dev/null || true
 
     echo "✓ State bucket ready"
 else
