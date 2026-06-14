@@ -28,6 +28,16 @@ resource "google_project_service" "artifact_registry" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "firestore" {
+  service            = "firestore.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "secretmanager" {
+  service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_service_account" "app" {
   account_id   = var.app_name
   display_name = "System Identity execution account for ${var.app_name}"
@@ -99,6 +109,7 @@ resource "google_firestore_database" "default" {
   name        = "(default)"
   location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
   type        = "FIRESTORE_NATIVE"
+  depends_on  = [google_project_service.firestore]
 }
 
 resource "google_project_iam_member" "firestore" {
@@ -110,9 +121,10 @@ resource "google_project_iam_member" "firestore" {
 
 # 2. Secret Manager System Configuration Block
 resource "google_secret_manager_secret" "example" {
-  count     = var.enable_secret_manager ? 1 : 0
-  project   = var.gcp_project_id
-  secret_id = "${var.app_name}-example-secret"
+  count      = var.enable_secret_manager ? 1 : 0
+  project    = var.gcp_project_id
+  secret_id  = "${var.app_name}-example-secret"
+  depends_on = [google_project_service.secretmanager]
   replication {
     auto {}
   }
@@ -155,18 +167,16 @@ resource "google_project_service" "firebase" {
   disable_on_destroy = false
 }
 
-resource "google_project_service" "firebaseauth" {
-  count   = var.enable_firebase_auth ? 1 : 0
-  service = "firebaseauth.googleapis.com"
-  disable_on_destroy = false
-}
+# Note: firebaseauth.googleapis.com may require additional org-level permissions
+# If Firebase Auth fails to enable, manually enable it via:
+# gcloud services enable firebaseauth.googleapis.com --project=PROJECT_ID
 
 resource "google_project_iam_member" "firebase" {
   count   = var.enable_firebase_auth ? 1 : 0
   project = var.gcp_project_id
   role    = "roles/firebase.viewer"
   member  = "serviceAccount:${google_service_account.app.email}"
-  depends_on = [google_project_service.firebase, google_project_service.firebaseauth]
+  depends_on = [google_project_service.firebase]
 }
 
 # 5. Vertex AI Engine System Integration
