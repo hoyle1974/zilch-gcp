@@ -87,19 +87,35 @@ VERTEX=$(prompt_toggle "Vertex AI Gemini Platform")
 
 # 6. Automate State Bucket Isolation (The Bootstrap)
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
+CURRENT_USER=$(gcloud config get-value account)
 echo ""
-echo "📦 Inspecting remote state architecture parameters..."
-if ! gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null; then
-    echo "🛠️ Remote state storage missing. Building state bucket 'gs://${STATE_BUCKET}'..."
-    gcloud storage buckets create "gs://${STATE_BUCKET}" --project="$PROJECT_ID" --location="$REGION"
+echo "📦 Setting up remote state bucket..."
 
-    # Grant the current user Storage Admin on the bucket (needed for Terraform state access)
-    CURRENT_USER=$(gcloud config get-value account)
+# Check if bucket exists
+if ! gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null; then
+    echo "🛠️ Creating state bucket 'gs://${STATE_BUCKET}'..."
+
+    # Create bucket
+    if ! gcloud storage buckets create "gs://${STATE_BUCKET}" \
+        --project="$PROJECT_ID" \
+        --location="$REGION" \
+        --uniform-bucket-level-access; then
+        echo "❌ Failed to create state bucket. You may need Storage Admin permissions."
+        echo "Run this to grant yourself permissions:"
+        echo "  gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:${CURRENT_USER} --role=roles/storage.admin"
+        exit 1
+    fi
+
+    # Grant current user Storage Admin on the project (needed for Terraform state access)
     echo "🔐 Granting Storage permissions to ${CURRENT_USER}..."
     gcloud projects add-iam-policy-binding "$PROJECT_ID" \
         --member="user:${CURRENT_USER}" \
         --role="roles/storage.admin" \
-        --quiet &>/dev/null || true
+        --quiet 2>/dev/null || true
+
+    echo "✓ State bucket ready"
+else
+    echo "✓ State bucket exists (reusing)"
 fi
 
 # 7. Terraform Execution Execution Lifecycle
