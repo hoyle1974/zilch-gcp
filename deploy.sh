@@ -200,14 +200,39 @@ if [ $? -ne 0 ]; then
 fi
 echo "✓ State bucket verified"
 
+# Wait for Terraform-specific global replication
+if [ "$BUCKET_CREATED" = true ]; then
+    echo ""
+    echo "⏳ Waiting for Terraform backend propagation (3 seconds)..."
+    sleep 3
+fi
+
 # 8. Terraform Execution Execution Lifecycle
 echo ""
 echo "🚀 Initializing Terraform modules over secure remote state..."
-if ! terraform init \
-    -backend-config="bucket=${STATE_BUCKET}" \
-    -backend-config="prefix=terraform/state" \
-    -reconfigure; then
-    echo "❌ Terraform init failed."
+
+# Retry terraform init up to 3 times (handles eventual consistency)
+TF_INIT_SUCCESS=false
+TF_INIT_RETRIES=0
+TF_MAX_RETRIES=3
+
+while [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; do
+    if terraform init \
+        -backend-config="bucket=${STATE_BUCKET}" \
+        -backend-config="prefix=terraform/state" \
+        -reconfigure 2>&1; then
+        TF_INIT_SUCCESS=true
+        break
+    fi
+    TF_INIT_RETRIES=$((TF_INIT_RETRIES+1))
+    if [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; then
+        echo "⚠️  Terraform init failed. Retrying ($TF_INIT_RETRIES/$TF_MAX_RETRIES)..."
+        sleep 2
+    fi
+done
+
+if [ "$TF_INIT_SUCCESS" = false ]; then
+    echo "❌ Terraform init failed after $TF_MAX_RETRIES attempts."
     echo ""
     echo "The state bucket exists and is accessible, but Terraform init still failed."
     echo "This usually means:"
