@@ -28,6 +28,26 @@ if ! gcloud projects describe "$PROJECT_ID" &>/dev/null; then
     exit 1
 fi
 
+# Verify user has minimum required IAM permissions
+CURRENT_USER=$(gcloud config get-value account)
+echo "🔍 Verifying IAM permissions for ${CURRENT_USER}..."
+
+# Check for Editor or Owner role (needed for Cloud Run, Firestore, etc.)
+ROLE_CHECK=$(gcloud projects get-iam-policy "$PROJECT_ID" \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:user:${CURRENT_USER} AND (bindings.role:roles/editor OR bindings.role:roles/owner OR bindings.role:roles/compute.admin)" \
+  --format="value(bindings.role)" 2>/dev/null | head -1)
+
+if [ -z "$ROLE_CHECK" ]; then
+    echo "⚠️  Warning: ${CURRENT_USER} may not have sufficient permissions."
+    echo "Zilch requires one of: Editor, Owner, or Cloud Run Admin + Compute Admin roles."
+    read -p "Continue anyway? (y/n): " CONTINUE
+    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+        echo "Aborted. Please grant yourself the necessary IAM roles and try again."
+        exit 1
+    fi
+fi
+
 # 3. Read App Name with Formatting Validations
 read -p "👉 Enter your application name (e.g., my-awesome-app): " APP_NAME
 if [[ ! "$APP_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
@@ -72,14 +92,31 @@ echo "📦 Inspecting remote state architecture parameters..."
 if ! gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null; then
     echo "🛠️ Remote state storage missing. Building state bucket 'gs://${STATE_BUCKET}'..."
     gcloud storage buckets create "gs://${STATE_BUCKET}" --project="$PROJECT_ID" --location="$REGION"
+
+    # Grant the current user Storage Admin on the bucket (needed for Terraform state access)
+    CURRENT_USER=$(gcloud config get-value account)
+    echo "🔐 Granting Storage permissions to ${CURRENT_USER}..."
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+        --member="user:${CURRENT_USER}" \
+        --role="roles/storage.admin" \
+        --quiet &>/dev/null || true
 fi
 
 # 7. Terraform Execution Execution Lifecycle
 echo "🚀 Initializing Terraform modules over secure remote state..."
-terraform init -backend-config="bucket=${STATE_BUCKET}" -reconfigure
+if ! terraform init -backend-config="bucket=${STATE_BUCKET}" -reconfigure; then
+    echo "❌ Terraform init failed. Common causes:"
+    echo "   • Missing IAM permissions (you may need Editor or Owner role)"
+    echo "   • State bucket exists but you don't have access (contact project admin)"
+    echo "   • Organization policy restricting Cloud Storage or Terraform"
+    echo ""
+    echo "To grant yourself permissions, run:"
+    echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} --member=user:${CURRENT_USER} --role=roles/editor"
+    exit 1
+fi
 
 echo "🏗️ Applying architectural blueprint definitions to Google Cloud..."
-terraform apply -auto-approve \
+if ! terraform apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
   -var="gcp_region=${REGION}" \
@@ -87,7 +124,11 @@ terraform apply -auto-approve \
   -var="enable_secret_manager=${SECRETS}" \
   -var="enable_cloud_storage=${STORAGE}" \
   -var="enable_firebase_auth=${FIREBASE}" \
-  -var="enable_vertex_ai=${VERTEX}"
+  -var="enable_vertex_ai=${VERTEX}"; then
+    echo "❌ Terraform apply failed. Check the error above."
+    echo "   Most common: insufficient permissions for required services."
+    exit 1
+fi
 
 # 8. Post-Deployment Endpoint Performance Validation Checks
 RUN_URL=$(terraform output -raw cloud_run_url)
