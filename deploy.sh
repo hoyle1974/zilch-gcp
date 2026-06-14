@@ -205,7 +205,6 @@ echo ""
 echo "🚀 Initializing Terraform modules over secure remote state..."
 if ! terraform init \
     -backend-config="bucket=${STATE_BUCKET}" \
-    -backend-config="project=${PROJECT_ID}" \
     -backend-config="prefix=terraform/state" \
     -reconfigure; then
     echo "❌ Terraform init failed."

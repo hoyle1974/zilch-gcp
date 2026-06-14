@@ -93,7 +93,6 @@ EOF
 cd /tmp/tf-test
 if terraform init \
     -backend-config="bucket=${TEST_BUCKET}" \
-    -backend-config="project=${PROJECT_ID}" \
     -backend-config="prefix=test" \
     -no-color &>/dev/null; then
     echo "   ✓ Terraform init successful"
