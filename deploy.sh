@@ -8,31 +8,45 @@ echo "  ⚡ ZILCH: Scale-to-Zero GCP Infrastructure Installer ⚡"
 echo "================================================================="
 echo ""
 
-# 1. Verification of Core Authentication
+# --- PREREQUISITE CHECKS (Run before any prompts) ---
+
+echo "🔍 Checking prerequisites..."
+echo ""
+
+# 1. Verify gcloud authentication
 if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q '@'; then
-    echo "❌ Error: Active gcloud credential context not discovered."
-    echo "Please execute 'gcloud auth login' in the terminal window first, then run this installer again."
+    echo "❌ Error: No active gcloud authentication found."
+    echo ""
+    echo "Please log in first:"
+    echo "  gcloud auth login"
+    echo ""
+    echo "Then run deploy.sh again."
     exit 1
 fi
 
-# 2. Extract Valid Project Identification Context
+CURRENT_USER=$(gcloud config get-value account)
+echo "✓ Authenticated as: ${CURRENT_USER}"
+
+# 2. Get and validate project ID
 read -p "👉 Enter your target GCP Project ID: " PROJECT_ID
 if [ -z "$PROJECT_ID" ]; then
-    echo "❌ Error: Project ID context cannot be empty."
+    echo "❌ Error: Project ID cannot be empty."
     exit 1
 fi
 
+# 3. Verify project exists and user has access
 if ! gcloud projects describe "$PROJECT_ID" &>/dev/null; then
-    echo "❌ Error: Unable to verify project connection details for '$PROJECT_ID'."
-    echo "Confirm spelling parameters or check permissions before retrying."
+    echo "❌ Error: Project '$PROJECT_ID' not found or you don't have access."
+    echo ""
+    echo "Check:"
+    echo "  • Project ID spelling is correct"
+    echo "  • You have 'Viewer' role on the project"
     exit 1
 fi
+echo "✓ Project found: ${PROJECT_ID}"
 
-# Verify user has minimum required IAM permissions
-CURRENT_USER=$(gcloud config get-value account)
-echo "🔍 Verifying IAM permissions for ${CURRENT_USER}..."
-
-# Check for Editor or Owner role (needed for Cloud Run, Firestore, etc.)
+# 4. Verify user has required IAM permissions (Editor or Owner)
+echo "✓ Checking IAM permissions..."
 ROLE_CHECK=$(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten="bindings[].members" \
   --filter="bindings.members:user:${CURRENT_USER} AND (bindings.role:roles/editor OR bindings.role:roles/owner)" \
@@ -46,15 +60,19 @@ if [ -z "$ROLE_CHECK" ]; then
     echo "  • Enable Google Cloud APIs"
     echo "  • Create service accounts and manage IAM"
     echo ""
-    echo "You need someone with Owner/Editor access to grant you the role. Ask your project admin to run:"
+    echo "NEXT STEP: Ask your project admin (someone with Owner/Editor role) to run this:"
     echo ""
     echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} \\"
     echo "    --member=user:${CURRENT_USER} \\"
     echo "    --role=roles/editor"
     echo ""
-    echo "Then try deploy.sh again."
+    echo "Once they've granted you the role, run deploy.sh again."
     exit 1
 fi
+echo "✓ IAM permissions verified"
+echo ""
+echo "✅ All prerequisites met. Ready to deploy."
+echo ""
 
 # 3. Read App Name with Formatting Validations
 read -p "👉 Enter your application name (e.g., my-awesome-app): " APP_NAME
