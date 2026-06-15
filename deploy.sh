@@ -450,6 +450,44 @@ if [ "$HEALTHY" = false ]; then
     echo "Review your Cloud Run execution engine console logs to trace unexpected boot failures."
 fi
 
+# 8. Update .zilch.config with user's selections (persist for next run)
+if [ -f ".zilch.config" ]; then
+    cat > .zilch.config << CONFIGEOF
+# Zilch Reference App Configuration
+# This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 services
+# Last updated: $(date)
+
+# GitHub Integration (required for Cloud Build)
+github_owner=${GITHUB_OWNER}
+github_repo=${GITHUB_REPO}
+
+# GCP Settings
+gcp_project_id=${PROJECT_ID}
+app_name=${APP_NAME}
+gcp_region=${GCP_REGION}
+
+# Phase 1 Optional Features
+enable_firestore=${ENABLE_FIRESTORE}
+enable_secret_manager=${ENABLE_SECRET_MANAGER}
+enable_cloud_storage=${ENABLE_CLOUD_STORAGE}
+enable_firebase_auth=${ENABLE_FIREBASE_AUTH}
+enable_vertex_ai=${ENABLE_VERTEX_AI}
+
+# Phase 2: Cloud Build + GitOps (optional)
+enable_cloud_build=${ENABLE_CLOUD_BUILD}
+
+# Phase 3: Advanced Services (optional)
+enable_pubsub=${ENABLE_PUBSUB}
+enable_cloud_tasks=${ENABLE_CLOUD_TASKS}
+enable_bigquery=${ENABLE_BIGQUERY}
+enable_cloud_kms=${ENABLE_CLOUD_KMS}
+enable_vision_ai=${ENABLE_VISION_AI}
+enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}
+enable_translation=${ENABLE_TRANSLATION}
+CONFIGEOF
+    echo "✅ Configuration saved to .zilch.config for next run"
+fi
+
 # 9. Format Summary Diagnostics Output
 echo ""
 echo "================================================================="
