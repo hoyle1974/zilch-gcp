@@ -265,6 +265,11 @@ resource "google_cloudbuild_trigger" "app_build" {
       id       = "deploy-run"
       wait_for = ["push-image"]
     }
+
+    # Logging configuration (required when using custom service account)
+    options {
+      logging = "CLOUD_LOGGING_ONLY"
+    }
   }
 
   # Use isolated service account (NOT default)
