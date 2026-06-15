@@ -9,11 +9,11 @@ Zilch helps solo developers, indie hackers, and non-backend engineers deploy pro
 Zilch is an **interactive infrastructure automation framework** that:
 
 - ✅ **Runs entirely in Google Cloud Shell** (no local setup required)
-- ✅ **Deploys Cloud Run + 5 optional services** (Firestore, Secrets, Storage, Firebase Auth, Vertex AI)
+- ✅ **Deploys Cloud Run + 12 optional services** (Firestore, Secrets, Storage, Firebase Auth, Vertex AI, Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation)
 - ✅ **Enforces Always Free tier compliance** (regions, quotas, best practices)
 - ✅ **Manages state securely** (remote state in Cloud Storage)
 - ✅ **Provides zero-friction UX** (interactive prompts, health checks, clear errors)
-- ✅ **Phase 2: Automatic CI/CD** (optional): Connect your GitHub repository. Every push to `main` auto-builds and deploys your app with zero manual steps.
+- ✅ **Automatic CI/CD** (Phase 2): Connect your GitHub repository. Every push to `main` auto-builds and deploys your app with zero manual steps.
 
 ## Getting Started
 
@@ -24,7 +24,7 @@ Click the **Cloud Shell** button in your GCP project or visit: https://shell.clo
 ### 2. Clone This Repository
 
 ```bash
-git clone https://github.com/yourusername/zilch-gcp.git
+git clone https://github.com/hoyle1974/zilch-gcp.git
 cd zilch-gcp
 ```
 
@@ -69,19 +69,25 @@ Within 2-3 minutes, your app will be live.
 
 ```
 zilch-gcp/
-├── deploy.sh                    # Interactive setup + GitHub integration
-├── tutorial.md                  # Includes Phase 2 GitOps workflow
-├── main.tf                      # Phase 1 + Phase 2 + Phase 3 infrastructure
-├── variables.tf                 # Includes all service toggle variables
-├── outputs.tf                   # Includes Cloud Build outputs
-├── .zilch.config.example        # Phase 2: Template for GitHub repo
-├── backend.tf                   # Remote state configuration
-├── terraform.tfvars.example     # Example variable values
-├── .gitignore                   # Git ignore rules
-├── README.md                    # This file
+├── deploy.sh                            # Interactive setup + GitHub integration script
+├── tutorial.md                          # Cloud Shell interactive walkthrough
+├── main.tf                              # Terraform: all Phase 1-3 infrastructure
+├── variables.tf                         # Terraform: input variables with validation
+├── outputs.tf                           # Terraform: resource outputs (URLs, IDs)
+├── backend.tf                           # Terraform: remote state in Cloud Storage
+├── terraform.tfvars.example             # Template for variable values (never committed)
+├── .zilch.config.example                # Template for deployment configuration
+├── test-gcs-backend.sh                  # Helper: verify state backend setup
+├── .gitignore                           # Git ignore rules
+├── README.md                            # This file
 └── docs/
-    └── superpowers/specs/
-        └── 2026-06-13-zilch-mvp-design.md  # Architecture specification
+    ├── PHASE_2_TEMPLATE.md              # Guide for extending with new services
+    └── superpowers/
+        ├── specs/
+        │   ├── 2026-06-13-zilch-mvp-design.md      # Phase 1 architecture
+        │   └── 2026-06-14-zilch-phase-2-design.md  # Phase 2 CI/CD design
+        └── plans/
+            └── 2026-06-15-zilch-phase-3-plan.md    # Phase 3 roadmap
 ```
 
 ## Deploy Your Own Code
@@ -162,13 +168,15 @@ For detailed architecture decisions, production guarantees, and design rationale
 
 📖 **[Zilch MVP Design Specification](docs/superpowers/specs/2026-06-13-zilch-mvp-design.md)**
 
-## Phase 2 & 3 (Advanced Features)
+## Implementation Status
 
-**Phase 2:** Cloud Build + Artifact Registry (automatic container builds) — ✅ Complete
+**Phase 1:** Core Cloud Run + Firestore, Secrets, Storage, Firebase Auth, Vertex AI — ✅ Complete
 
-**Phase 3:** Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation APIs — In Progress
+**Phase 2:** Cloud Build + Artifact Registry (automatic container builds from GitHub) — ✅ Complete
 
-See `docs/superpowers/plans/` for implementation roadmap.
+**Phase 3:** Extended services (Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation) — ✅ All toggles implemented, integration guide in progress
+
+All Phase 3 services support feature flags via `variables.tf`. See `docs/superpowers/specs/` for architecture details and `docs/superpowers/plans/` for roadmap.
 
 ## Cost & Quotas
 
@@ -184,9 +192,9 @@ MIT License — See LICENSE file for details.
 
 This is an open-source project. Contributions welcome!
 
-- Found a bug? [Create an issue](https://github.com/yourusername/zilch-gcp/issues)
-- Want to add a service? [See Phase 2 Template](docs/PHASE_2_TEMPLATE.md)
-- Have feedback? [Join discussions](https://github.com/yourusername/zilch-gcp/discussions)
+- Found a bug? [Create an issue](https://github.com/hoyle1974/zilch-gcp/issues)
+- Want to add a service? [See Phase 3 Extension Guide](docs/PHASE_2_TEMPLATE.md)
+- Have feedback? [Join discussions](https://github.com/hoyle1974/zilch-gcp/discussions)
 
 ## Support
 
