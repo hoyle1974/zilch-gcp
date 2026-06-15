@@ -41,10 +41,22 @@ ENABLE_CLOUD_BUILD="false"
 GITHUB_OWNER=""
 GITHUB_REPO=""
 
-# Load from .zilch.config if it exists
+# Load from .zilch.config if it exists (uses lowercase variable names)
 if [ -f ".zilch.config" ]; then
     echo "📋 Reading .zilch.config..."
     source .zilch.config
+    # Map lowercase config names to uppercase internal variables
+    [ -n "$gcp_project_id" ] && PROJECT_ID="$gcp_project_id"
+    [ -n "$app_name" ] && APP_NAME="$app_name"
+    [ -n "$gcp_region" ] && GCP_REGION="$gcp_region"
+    [ -n "$enable_firestore" ] && ENABLE_FIRESTORE="$enable_firestore"
+    [ -n "$enable_secret_manager" ] && ENABLE_SECRET_MANAGER="$enable_secret_manager"
+    [ -n "$enable_cloud_storage" ] && ENABLE_CLOUD_STORAGE="$enable_cloud_storage"
+    [ -n "$enable_firebase_auth" ] && ENABLE_FIREBASE_AUTH="$enable_firebase_auth"
+    [ -n "$enable_vertex_ai" ] && ENABLE_VERTEX_AI="$enable_vertex_ai"
+    [ -n "$enable_cloud_build" ] && ENABLE_CLOUD_BUILD="$enable_cloud_build"
+    [ -n "$github_owner" ] && GITHUB_OWNER="$github_owner"
+    [ -n "$github_repo" ] && GITHUB_REPO="$github_repo"
     echo "✓ Configuration loaded"
 fi
 
@@ -171,8 +183,8 @@ if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
         echo "❌ Error: Cloud Build enabled but GitHub not configured in .zilch.config"
         echo ""
         echo "Add these to .zilch.config:"
-        echo "  GITHUB_OWNER=your-username"
-        echo "  GITHUB_REPO=your-repo"
+        echo "  github_owner=your-username"
+        echo "  github_repo=your-repo"
         echo ""
         exit 1
     fi
