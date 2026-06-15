@@ -448,12 +448,22 @@ resource "google_project_iam_member" "kms_crypto_key_encrypter_decrypter" {
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
+# Enable Cloud Vision API
+resource "google_project_service" "vision_api" {
+  count   = var.enable_vision_ai ? 1 : 0
+  service = "vision.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
 # IAM: Allow Cloud Run to use Vision AI
 resource "google_project_iam_member" "vision_ai_user" {
-  count   = var.enable_vision_ai ? 1 : 0
-  project = var.gcp_project_id
-  role    = "roles/aiplatform.user"
-  member  = "serviceAccount:${google_service_account.app.email}"
+  count      = var.enable_vision_ai ? 1 : 0
+  project    = var.gcp_project_id
+  role       = "roles/aiplatform.user"
+  member     = "serviceAccount:${google_service_account.app.email}"
+  depends_on = [google_project_service.vision_api]
 }
 
 # Enable Speech-to-Text API
