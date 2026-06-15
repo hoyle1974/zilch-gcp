@@ -27,32 +27,32 @@ variable "app_name" {
 }
 
 variable "enable_firestore" {
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
   description = "Enable Firestore NoSQL Database (free tier: 1GB storage, 50K reads/day)"
 }
 
 variable "enable_secret_manager" {
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
   description = "Enable Secret Manager for secure credential storage"
 }
 
 variable "enable_vertex_ai" {
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
   description = "Enable Vertex AI (includes Gemini API access, free: 60 req/min)"
 }
 
 variable "enable_cloud_storage" {
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
   description = "Enable Cloud Storage bucket for file uploads/downloads (free tier: 5GB)"
 }
 
 variable "enable_firebase_auth" {
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
   description = "Enable Firebase Authentication for social login"
 }
 
