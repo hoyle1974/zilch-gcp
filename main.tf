@@ -154,6 +154,82 @@ resource "google_artifact_registry_repository" "app_images" {
   }
 }
 
+# Cloud Build trigger: watches GitHub main branch
+resource "google_cloudbuild_trigger" "app_build" {
+  count = var.enable_cloud_build ? 1 : 0
+
+  project     = var.gcp_project_id
+  name        = "${var.app_name}-trigger"
+  description = "Auto-build ${var.app_name} on push to main"
+
+  # IMPORTANT: User must manually connect GitHub via GCP Console
+  # (GitHub OAuth cannot be done headlessly via Terraform)
+  github {
+    owner = var.github_owner
+    name  = var.github_repo
+    push {
+      branch = "^main$" # Only main branch triggers
+    }
+  }
+
+  # Inline build steps (NOT cloudbuild.yaml file)
+  build {
+    # Step 1: Build container with layer caching
+    step {
+      name = "gcr.io/cloud-builders/docker"
+      args = [
+        "build",
+        "-t", "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app:latest",
+        "-t", "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app:$BUILD_ID",
+        "--cache-from", "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app:latest",
+        "."
+      ]
+      id = "build-image"
+    }
+
+    # Step 2: Push to Artifact Registry
+    step {
+      name = "gcr.io/cloud-builders/docker"
+      args = [
+        "push",
+        "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app"
+      ]
+      id       = "push-image"
+      wait_for = ["build-image"]
+    }
+
+    # Step 3: Deploy to Cloud Run
+    step {
+      name       = "gcr.io/google.com/cloudsdktool/cloud-sdk"
+      entrypoint = "gcloud"
+      args = [
+        "run", "deploy", var.app_name,
+        "--image", "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app:latest",
+        "--region", var.gcp_region,
+        "--service-account", google_service_account.app.email,
+        "--platform", "managed",
+        "--allow-unauthenticated"
+      ]
+      id       = "deploy-run"
+      wait_for = ["push-image"]
+    }
+  }
+
+  # Use isolated service account (NOT default)
+  service_account = google_service_account.cloud_build[0].id
+
+  # Allow 10 minutes for full build + deploy cycle
+  timeout = "600s"
+
+  depends_on = [
+    google_artifact_registry_repository.app_images,
+    google_service_account.cloud_build,
+    google_project_iam_member.builder_artifact_registry,
+    google_project_iam_member.builder_cloud_run,
+    google_project_iam_member.builder_iam
+  ]
+}
+
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
 
 # 1. Firestore System Configuration Block
