@@ -434,7 +434,9 @@ HEALTHY=false
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$RUN_URL" || echo "000")
-    if [ "$HTTP_STATUS" == "200" ]; then
+    # Accept 2xx success, 401 unauthorized, 404 not found as healthy
+    # (proves container is running; reject 5xx errors and timeouts which indicate crashes)
+    if [[ "$HTTP_STATUS" =~ ^2[0-9][0-9]$ ]] || [ "$HTTP_STATUS" == "401" ] || [ "$HTTP_STATUS" == "404" ]; then
         HEALTHY=true
         break
     fi
