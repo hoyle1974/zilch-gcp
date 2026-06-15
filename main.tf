@@ -131,6 +131,29 @@ resource "google_cloud_run_service_iam_member" "public" {
   member   = "allUsers"
 }
 
+# --- PHASE 2: ARTIFACT REGISTRY + CLOUD BUILD ---
+
+# Artifact Registry for container images
+resource "google_artifact_registry_repository" "app_images" {
+  count         = var.enable_cloud_build ? 1 : 0
+  location      = var.gcp_region
+  repository_id = "${var.app_name}-images"
+  format        = "DOCKER"
+  description   = "Container images for ${var.app_name} (Phase 2 Cloud Build)"
+
+  # Cleanup: Keep ONLY current image (rebuild from git if needed)
+  cleanup_policies {
+    id     = "delete-all-old"
+    action = "DELETE"
+    condition {
+      tag_state = "UNTAGGED"
+      older_than {
+        duration = "0s" # Delete ALL old builds immediately
+      }
+    }
+  }
+}
+
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
 
 # 1. Firestore System Configuration Block
