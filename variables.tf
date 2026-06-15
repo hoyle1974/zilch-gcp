@@ -55,3 +55,21 @@ variable "enable_firebase_auth" {
   default = false
   description = "Enable Firebase Authentication for social login"
 }
+
+variable "github_owner" {
+  type        = string
+  default     = ""
+  description = "GitHub repository owner (username or organization)"
+}
+
+variable "github_repo" {
+  type        = string
+  default     = ""
+  description = "GitHub repository name (without owner)"
+}
+
+variable "enable_cloud_build" {
+  type        = bool
+  default     = true
+  description = "Enable Cloud Build CI/CD (recommended but optional)"
+}
