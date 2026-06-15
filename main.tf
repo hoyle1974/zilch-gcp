@@ -140,6 +140,10 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_BIGQUERY_DATASET"
           value = var.enable_bigquery ? google_bigquery_dataset.app_analytics[0].dataset_id : ""
         }
+        env {
+          name  = "ZILCH_KMS_KEY_ID"
+          value = var.enable_cloud_kms ? google_kms_crypto_key.app_key[0].id : ""
+        }
       }
     }
   }
@@ -378,6 +382,45 @@ resource "google_project_iam_member" "bigquery_data_editor" {
   count   = var.enable_bigquery ? 1 : 0
   project = var.gcp_project_id
   role    = "roles/bigquery.dataEditor"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+# Enable Cloud KMS API
+resource "google_project_service" "kms" {
+  count   = var.enable_cloud_kms ? 1 : 0
+  service = "cloudkms.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
+# Cloud KMS keyring for encryption
+resource "google_kms_key_ring" "app_keys" {
+  count    = var.enable_cloud_kms ? 1 : 0
+  name     = "${var.app_name}-keyring"
+  location = var.gcp_region
+  project  = var.gcp_project_id
+
+  depends_on = [google_project_service.kms[0]]
+}
+
+# Cloud KMS crypto key for encryption/decryption
+resource "google_kms_crypto_key" "app_key" {
+  count           = var.enable_cloud_kms ? 1 : 0
+  name            = "${var.app_name}-key"
+  key_ring        = google_kms_key_ring.app_keys[0].id
+  rotation_period = "7776000s" # 90 days
+
+  labels = {
+    app = var.app_name
+  }
+}
+
+# IAM: Allow Cloud Run to use KMS for encryption
+resource "google_project_iam_member" "kms_crypto_key_encrypter_decrypter" {
+  count   = var.enable_cloud_kms ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
