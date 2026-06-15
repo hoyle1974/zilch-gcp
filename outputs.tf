@@ -27,3 +27,18 @@ output "app_name" {
   value       = var.app_name
   description = "Application name used as resource prefix."
 }
+
+output "cloud_build_trigger_id" {
+  value       = var.enable_cloud_build ? google_cloudbuild_trigger.app_build[0].id : null
+  description = "Cloud Build trigger ID (for manual triggers)"
+}
+
+output "artifact_registry_repository" {
+  value       = var.enable_cloud_build ? google_artifact_registry_repository.app_images[0].repository_id : null
+  description = "Artifact Registry repository name"
+}
+
+output "cloud_build_service_account" {
+  value       = var.enable_cloud_build ? google_service_account.cloud_build.email : null
+  description = "Cloud Build service account (isolated, least-privilege)"
+}
