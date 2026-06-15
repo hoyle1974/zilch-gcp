@@ -43,6 +43,37 @@ resource "google_service_account" "app" {
   display_name = "System Identity execution account for ${var.app_name}"
 }
 
+# Dedicated service account for Cloud Build (minimal permissions)
+resource "google_service_account" "cloud_build" {
+  account_id   = "${var.app_name}-builder"
+  display_name = "Cloud Build service account for ${var.app_name}"
+  description  = "Isolated service account for secure CI/CD builds"
+}
+
+# Permission 1: Push images to Artifact Registry
+resource "google_project_iam_member" "builder_artifact_registry" {
+  count   = var.enable_cloud_build ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Permission 2: Deploy to Cloud Run
+resource "google_project_iam_member" "builder_cloud_run" {
+  count   = var.enable_cloud_build ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/run.developer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Permission 3: Use the app service account (for Cloud Run to pull secrets)
+resource "google_project_iam_member" "builder_iam" {
+  count   = var.enable_cloud_build ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
@@ -166,8 +197,8 @@ resource "google_project_iam_member" "storage" {
 # 4. Firebase Authentication Provisioning Engine
 # Enable Firebase APIs (Firebase project is created via console, not Terraform)
 resource "google_project_service" "firebase" {
-  count   = var.enable_firebase_auth ? 1 : 0
-  service = "firebase.googleapis.com"
+  count              = var.enable_firebase_auth ? 1 : 0
+  service            = "firebase.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -176,10 +207,10 @@ resource "google_project_service" "firebase" {
 # gcloud services enable firebaseauth.googleapis.com --project=PROJECT_ID
 
 resource "google_project_iam_member" "firebase" {
-  count   = var.enable_firebase_auth ? 1 : 0
-  project = var.gcp_project_id
-  role    = "roles/firebase.viewer"
-  member  = "serviceAccount:${google_service_account.app.email}"
+  count      = var.enable_firebase_auth ? 1 : 0
+  project    = var.gcp_project_id
+  role       = "roles/firebase.viewer"
+  member     = "serviceAccount:${google_service_account.app.email}"
   depends_on = [google_project_service.firebase]
 }
 
@@ -191,9 +222,9 @@ resource "google_project_service" "aiplatform" {
 }
 
 resource "google_project_iam_member" "vertex_ai" {
-  count   = var.enable_vertex_ai ? 1 : 0
-  project = var.gcp_project_id
-  role    = "roles/aiplatform.user"
-  member  = "serviceAccount:${google_service_account.app.email}"
+  count      = var.enable_vertex_ai ? 1 : 0
+  project    = var.gcp_project_id
+  role       = "roles/aiplatform.user"
+  member     = "serviceAccount:${google_service_account.app.email}"
   depends_on = [google_project_service.aiplatform]
 }
