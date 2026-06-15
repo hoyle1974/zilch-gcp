@@ -74,30 +74,74 @@ echo ""
 echo "✅ All prerequisites met. Ready to deploy."
 echo ""
 
-# 3. Read App Name with Formatting Validations
-read -p "👉 Enter your application name (e.g., my-awesome-app): " APP_NAME
+# --- LOAD CONFIG EARLY (before prompts) ---
+# Initialize defaults
+APP_NAME=""
+GCP_REGION="us-central1"
+ENABLE_FIRESTORE="false"
+ENABLE_SECRET_MANAGER="false"
+ENABLE_CLOUD_STORAGE="false"
+ENABLE_FIREBASE_AUTH="false"
+ENABLE_VERTEX_AI="false"
+ENABLE_CLOUD_BUILD="false"
+GITHUB_OWNER=""
+GITHUB_REPO=""
+
+# Load from .zilch.config if it exists
+if [ -f ".zilch.config" ]; then
+    echo "📋 Reading .zilch.config..."
+    source .zilch.config
+    echo "✓ Configuration loaded"
+    echo ""
+fi
+
+# --- INTERACTIVE PROMPTS WITH DEFAULTS FROM CONFIG ---
+
+# 3. Read App Name (with default from config)
+DEFAULT_APP_NAME="${APP_NAME:-zilch-app}"
+read -p "👉 Enter your application name [$DEFAULT_APP_NAME]: " INPUT_APP_NAME
+APP_NAME="${INPUT_APP_NAME:-$DEFAULT_APP_NAME}"
+
 if [[ ! "$APP_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
     echo "❌ Error: Invalid structure. App name must be 3-30 lowercase characters, numbers, or hyphens."
     exit 1
 fi
 
-# 4. Standardize Target Region Selection
+# 4. Standardize Target Region Selection (with default from config)
+echo ""
 echo "🌐 Choose your infrastructure anchor zone (Always Free Eligible):"
 echo "  [1] us-central1 (Iowa - Preferred Default)"
 echo "  [2] us-east1    (South Carolina)"
 echo "  [3] us-west1    (Oregon)"
-read -p "Selection [1-3]: " REGION_CHOICE
+
+# Show current region as default
+REGION_DEFAULT="1"
+[ "$GCP_REGION" = "us-east1" ] && REGION_DEFAULT="2"
+[ "$GCP_REGION" = "us-west1" ] && REGION_DEFAULT="3"
+
+read -p "Selection [1-3, default: $REGION_DEFAULT]: " REGION_CHOICE
+REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
 
 case "$REGION_CHOICE" in
-    2) REGION="us-east1" ;;
-    3) REGION="us-west1" ;;
-    *) REGION="us-central1" ;;
+    2) GCP_REGION="us-east1" ;;
+    3) GCP_REGION="us-west1" ;;
+    *) GCP_REGION="us-central1" ;;
 esac
 
 # 5. Capture Service Configuration Feature Flags
 prompt_toggle() {
     local feature_name=$1
-    read -p "❓ Enable $feature_name support? (y/n): " choice
+    local current_value=$2
+
+    # Show current value as default
+    local default_response="n"
+    if [ "$current_value" = "true" ]; then
+        default_response="y"
+    fi
+
+    read -p "❓ Enable $feature_name support? (y/n) [default: $default_response]: " choice
+    choice="${choice:-$default_response}"
+
     if [[ "$choice" =~ ^[Yy]$ ]]; then
         echo "true"
     else
@@ -105,33 +149,24 @@ prompt_toggle() {
     fi
 }
 
-FIRESTORE=$(prompt_toggle "Firestore NoSQL Database")
-SECRETS=$(prompt_toggle "Secret Manager Keys")
-STORAGE=$(prompt_toggle "Cloud Storage Asset Buckets")
+echo ""
+ENABLE_FIRESTORE=$(prompt_toggle "Firestore NoSQL Database" "$ENABLE_FIRESTORE")
+ENABLE_SECRET_MANAGER=$(prompt_toggle "Secret Manager Keys" "$ENABLE_SECRET_MANAGER")
+ENABLE_CLOUD_STORAGE=$(prompt_toggle "Cloud Storage Asset Buckets" "$ENABLE_CLOUD_STORAGE")
 
-CLOUD_BUILD=$(prompt_toggle "Cloud Build CI/CD (recommended)")
-FIREBASE=$(prompt_toggle "Firebase Social Authentication")
-VERTEX=$(prompt_toggle "Vertex AI Gemini Platform")
-
-# Read .zilch.config if it exists (for GitHub integration)
-GITHUB_OWNER=""
-GITHUB_REPO=""
-if [ -f ".zilch.config" ]; then
-    echo ""
-    echo "📋 Reading .zilch.config..."
-    source .zilch.config
-    echo "✓ Configuration loaded"
-fi
+ENABLE_CLOUD_BUILD=$(prompt_toggle "Cloud Build CI/CD (recommended)" "$ENABLE_CLOUD_BUILD")
+ENABLE_FIREBASE_AUTH=$(prompt_toggle "Firebase Social Authentication" "$ENABLE_FIREBASE_AUTH")
+ENABLE_VERTEX_AI=$(prompt_toggle "Vertex AI Gemini Platform" "$ENABLE_VERTEX_AI")
 
 # If Cloud Build is enabled, GitHub info is required
-if [ "$CLOUD_BUILD" == "true" ]; then
+if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
         echo ""
         echo "❌ Error: Cloud Build enabled but GitHub not configured in .zilch.config"
         echo ""
         echo "Add these to .zilch.config:"
-        echo "  github_owner=your-username"
-        echo "  github_repo=your-repo"
+        echo "  GITHUB_OWNER=your-username"
+        echo "  GITHUB_REPO=your-repo"
         echo ""
         exit 1
     fi
@@ -146,7 +181,7 @@ echo "📦 Setting up remote state bucket..."
 BUCKET_CREATED=false
 if gcloud storage buckets create "gs://${STATE_BUCKET}" \
     --project="$PROJECT_ID" \
-    --location="$REGION" \
+    --location="$GCP_REGION" \
     --uniform-bucket-level-access \
     &>/dev/null 2>&1; then
     echo "🛠️ Created new state bucket: gs://${STATE_BUCKET}"
@@ -234,7 +269,7 @@ if ! gcloud config set project "$PROJECT_ID" --quiet; then
 fi
 
 # 5. Check if Cloud Build is enabled and validate GitHub connection
-if [ "$CLOUD_BUILD" == "true" ]; then
+if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     echo ""
     echo "☁️ Phase 2: Cloud Build + GitOps Setup"
     echo ""
@@ -325,15 +360,15 @@ echo "🏗️ Applying architectural blueprint definitions to Google Cloud..."
 if ! terraform apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
-  -var="gcp_region=${REGION}" \
+  -var="gcp_region=${GCP_REGION}" \
   -var="github_owner=${GITHUB_OWNER}" \
   -var="github_repo=${GITHUB_REPO}" \
-  -var="enable_cloud_build=${CLOUD_BUILD}" \
-  -var="enable_firestore=${FIRESTORE}" \
-  -var="enable_secret_manager=${SECRETS}" \
-  -var="enable_cloud_storage=${STORAGE}" \
-  -var="enable_firebase_auth=${FIREBASE}" \
-  -var="enable_vertex_ai=${VERTEX}"; then
+  -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
+  -var="enable_firestore=${ENABLE_FIRESTORE}" \
+  -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
+  -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
+  -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
+  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}"; then
     echo "❌ Terraform apply failed. Check the error above."
     echo "   Most common: insufficient permissions for required services."
     exit 1
@@ -371,22 +406,22 @@ echo " 🎉 SUCCESS: Zilch Architecture Instantiated Successfully! "
 echo "================================================================="
 echo "📍 Service Endpoint URL: ${RUN_URL}"
 echo "👤 Bound Run Identity:   $(terraform output -raw service_account_email)"
-echo "🌐 Operational Region:   ${REGION}"
+echo "🌐 Operational Region:   ${GCP_REGION}"
 echo ""
 echo "📋 Available Runtime Application Discovery Environment Tunnels:"
-if [ "$FIRESTORE" == "true" ]; then echo "  ↳ ZILCH_FIRESTORE_DATABASE : (default)"; fi
-if [ "$SECRETS" == "true" ]; then echo "  ↳ ZILCH_SECRET_PREFIX      : ${APP_NAME}-"; fi
-if [ "$STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform output -raw storage_bucket 2>/dev/null)"; fi
-if [ "$VERTEX" == "true" ]; then echo "  ↳ ZILCH_VERTEX_AI_ENABLED  : true"; fi
-if [ "$FIREBASE" == "true" ]; then echo "  ↳ ZILCH_FIREBASE_ENABLED   : true"; fi
+if [ "$ENABLE_FIRESTORE" == "true" ]; then echo "  ↳ ZILCH_FIRESTORE_DATABASE : (default)"; fi
+if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then echo "  ↳ ZILCH_SECRET_PREFIX      : ${APP_NAME}-"; fi
+if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform output -raw storage_bucket 2>/dev/null)"; fi
+if [ "$ENABLE_VERTEX_AI" == "true" ]; then echo "  ↳ ZILCH_VERTEX_AI_ENABLED  : true"; fi
+if [ "$ENABLE_FIREBASE_AUTH" == "true" ]; then echo "  ↳ ZILCH_FIREBASE_ENABLED   : true"; fi
 echo ""
 echo "💡 Reminder: Your setup operates completely on Google's Free tier limits."
 echo "   Track parameters safely via: https://cloud.google.com/always-free"
 echo ""
 echo "📚 Next Steps:"
 echo "   1. Deploy your code: gcloud run deploy ${APP_NAME} --source ."
-echo "   2. View logs: gcloud run logs read ${APP_NAME} --region=${REGION}"
-if [ "$FIREBASE" == "true" ]; then
+echo "   2. View logs: gcloud run logs read ${APP_NAME} --region=${GCP_REGION}"
+if [ "$ENABLE_FIREBASE_AUTH" == "true" ]; then
     echo "   3. Configure auth: https://console.firebase.google.com/project/${PROJECT_ID}/authentication"
 fi
 echo "================================================================="
