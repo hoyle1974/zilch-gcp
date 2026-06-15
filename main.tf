@@ -80,6 +80,14 @@ resource "google_project_iam_member" "builder_iam" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Permission 4: Write logs to Cloud Logging
+resource "google_project_iam_member" "builder_logging" {
+  count   = var.enable_cloud_build ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
