@@ -27,8 +27,35 @@ fi
 CURRENT_USER=$(gcloud config get-value account)
 echo "✓ Authenticated as: ${CURRENT_USER}"
 
-# 2. Get and validate project ID
-read -p "👉 Enter your target GCP Project ID: " PROJECT_ID
+# --- LOAD CONFIG EARLY (before any prompts) ---
+# Initialize defaults
+PROJECT_ID=""
+APP_NAME=""
+GCP_REGION="us-central1"
+ENABLE_FIRESTORE="false"
+ENABLE_SECRET_MANAGER="false"
+ENABLE_CLOUD_STORAGE="false"
+ENABLE_FIREBASE_AUTH="false"
+ENABLE_VERTEX_AI="false"
+ENABLE_CLOUD_BUILD="false"
+GITHUB_OWNER=""
+GITHUB_REPO=""
+
+# Load from .zilch.config if it exists
+if [ -f ".zilch.config" ]; then
+    echo "📋 Reading .zilch.config..."
+    source .zilch.config
+    echo "✓ Configuration loaded"
+fi
+
+# 2. Get and validate project ID (with default from config)
+DEFAULT_PROJECT="${PROJECT_ID:-}"
+if [ -z "$DEFAULT_PROJECT" ]; then
+    read -p "👉 Enter your target GCP Project ID: " PROJECT_ID
+else
+    read -p "👉 Enter your target GCP Project ID [$DEFAULT_PROJECT]: " INPUT
+    PROJECT_ID="${INPUT:-$DEFAULT_PROJECT}"
+fi
 if [ -z "$PROJECT_ID" ]; then
     echo "❌ Error: Project ID cannot be empty."
     exit 1
@@ -73,27 +100,6 @@ echo "✓ IAM permissions verified"
 echo ""
 echo "✅ All prerequisites met. Ready to deploy."
 echo ""
-
-# --- LOAD CONFIG EARLY (before prompts) ---
-# Initialize defaults
-APP_NAME=""
-GCP_REGION="us-central1"
-ENABLE_FIRESTORE="false"
-ENABLE_SECRET_MANAGER="false"
-ENABLE_CLOUD_STORAGE="false"
-ENABLE_FIREBASE_AUTH="false"
-ENABLE_VERTEX_AI="false"
-ENABLE_CLOUD_BUILD="false"
-GITHUB_OWNER=""
-GITHUB_REPO=""
-
-# Load from .zilch.config if it exists
-if [ -f ".zilch.config" ]; then
-    echo "📋 Reading .zilch.config..."
-    source .zilch.config
-    echo "✓ Configuration loaded"
-    echo ""
-fi
 
 # --- INTERACTIVE PROMPTS WITH DEFAULTS FROM CONFIG ---
 
