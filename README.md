@@ -13,6 +13,7 @@ Zilch is an **interactive infrastructure automation framework** that:
 - ✅ **Enforces Always Free tier compliance** (regions, quotas, best practices)
 - ✅ **Manages state securely** (remote state in Cloud Storage)
 - ✅ **Provides zero-friction UX** (interactive prompts, health checks, clear errors)
+- ✅ **Phase 2: Automatic CI/CD** (optional): Connect your GitHub repository. Every push to `main` auto-builds and deploys your app with zero manual steps.
 
 ## Getting Started
 
