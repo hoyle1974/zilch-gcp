@@ -62,11 +62,12 @@ Within 2-3 minutes, your app will be live.
 
 ```
 zilch-gcp/
-├── deploy.sh                    # Interactive setup script
-├── tutorial.md                  # Step-by-step walkthrough
-├── main.tf                      # Terraform infrastructure code
-├── variables.tf                 # Input variable definitions
-├── outputs.tf                   # Terraform outputs
+├── deploy.sh                    # Interactive setup + GitHub integration
+├── tutorial.md                  # Includes Phase 2 GitOps workflow
+├── main.tf                      # Phase 1 + Phase 2 infrastructure
+├── variables.tf                 # Includes GitHub and Cloud Build vars
+├── outputs.tf                   # Includes Cloud Build outputs
+├── .zilch.config.example        # Phase 2: Template for GitHub repo
 ├── backend.tf                   # Remote state configuration
 ├── terraform.tfvars.example     # Example variable values
 ├── .gitignore                   # Git ignore rules
