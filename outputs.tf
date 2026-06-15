@@ -42,3 +42,43 @@ output "cloud_build_service_account" {
   value       = var.enable_cloud_build ? google_service_account.cloud_build.email : null
   description = "Cloud Build service account (isolated, least-privilege)"
 }
+
+output "pubsub_topic" {
+  value       = var.enable_pubsub ? google_pubsub_topic.app_events[0].name : null
+  description = "Pub/Sub topic name for event streaming (if enabled)"
+}
+
+output "pubsub_subscription" {
+  value       = var.enable_pubsub ? google_pubsub_subscription.app_events_sub[0].name : null
+  description = "Pub/Sub subscription name (if enabled)"
+}
+
+output "cloud_tasks_queue" {
+  value       = var.enable_cloud_tasks ? google_cloud_tasks_queue.app_jobs[0].name : null
+  description = "Cloud Tasks queue name for async jobs (if enabled)"
+}
+
+output "bigquery_dataset" {
+  value       = var.enable_bigquery ? google_bigquery_dataset.app_analytics[0].dataset_id : null
+  description = "BigQuery dataset ID for analytics (if enabled)"
+}
+
+output "kms_key_id" {
+  value       = var.enable_cloud_kms ? google_kms_crypto_key.app_key[0].id : null
+  description = "Cloud KMS crypto key ID for encryption (if enabled)"
+}
+
+output "vision_ai_enabled" {
+  value       = var.enable_vision_ai ? "true" : "false"
+  description = "Vision AI is enabled"
+}
+
+output "speech_to_text_enabled" {
+  value       = var.enable_speech_to_text ? "true" : "false"
+  description = "Speech-to-Text API is enabled"
+}
+
+output "translation_enabled" {
+  value       = var.enable_translation ? "true" : "false"
+  description = "Translation API is enabled"
+}
