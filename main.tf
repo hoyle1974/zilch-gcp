@@ -170,7 +170,7 @@ resource "google_artifact_registry_repository" "app_images" {
     action = "DELETE"
     condition {
       tag_state  = "TAGGED"
-      older_than = "7d" # Keep last 7 days only
+      older_than = "604800s" # Keep last 7 days only (7 * 24 * 60 * 60 = 604800 seconds)
     }
   }
 }
