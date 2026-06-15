@@ -152,6 +152,10 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_SPEECH_TO_TEXT_ENABLED"
           value = var.enable_speech_to_text ? "true" : ""
         }
+        env {
+          name  = "ZILCH_TRANSLATION_ENABLED"
+          value = var.enable_translation ? "true" : ""
+        }
       }
     }
   }
@@ -457,6 +461,25 @@ resource "google_project_iam_member" "speech_client" {
   member  = "serviceAccount:${google_service_account.app.email}"
 
   depends_on = [google_project_service.speech_to_text]
+}
+
+# Enable Translation API
+resource "google_project_service" "translate" {
+  count   = var.enable_translation ? 1 : 0
+  service = "translate.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
+# IAM: Allow Cloud Run to use Translation API
+resource "google_project_iam_member" "translate_client" {
+  count   = var.enable_translation ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/cloudtranslate.agent"
+  member  = "serviceAccount:${google_service_account.app.email}"
+
+  depends_on = [google_project_service.translate]
 }
 
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
