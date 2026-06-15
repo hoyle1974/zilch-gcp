@@ -2,74 +2,75 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Deploy a production-grade serverless app on Google Cloud Platform in 2-3 minutes. From your browser. No console clicking, no IAM headaches, no credit card worries.
+Zilch helps solo developers, indie hackers, and non-backend engineers deploy production-grade serverless applications on Google Cloud Platform without touching the web console. Deploy a working app in 2-3 minutes from Cloud Shell.
 
-Zilch is built for solo developers, indie hackers, and anyone who'd rather spend time building features than fighting cloud infrastructure. If you've ever wasted an afternoon in the GCP console, this exists for you.
+## What is Zilch?
 
-## How It Works
+Zilch is an interactive infrastructure-as-code framework that automates GCP serverless deployments via Terraform. Run `./deploy.sh` in Cloud Shell, answer a few prompts, and deploy a complete application stack in 2-3 minutes.
 
-Zilch is a bash script that spins up a complete serverless stack using Terraform, right from Cloud Shell. Run `./deploy.sh`, answer a few prompts, and you're done. No Docker knowledge required. No IAM policy documents. No crossing your fingers hoping your bill stays under $50.
+You get:
+- **Cloud Run** — Serverless container platform, auto-scaling, 2M requests/month free
+- **12 optional services** — Firestore, Secret Manager, Cloud Storage, Firebase Auth, Vertex AI, Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation
+- **Always Free tier** — Only provisions in Always Free regions (us-central1, us-east1, us-west1)
+- **Remote Terraform state** — Stored in Cloud Storage, not in your repo
+- **Optional CI/CD** — Connect GitHub for push-to-deploy workflows
+- **Least-privilege IAM** — Service account only has permissions for enabled services
 
-What you get:
-- **Cloud Run** — Your app auto-scales from zero. Pay nothing when dormant.
-- **12 optional add-ons** — Firestore, Postgres (via Secrets), Cloud Storage, Firebase Auth, Vertex AI, Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation
-- **Always Free tier** — Zilch only provisions resources in regions that qualify. Your project won't accidentally bill you.
-- **Remote state** — Terraform state lives safely in Cloud Storage, not in your repo.
-- **GitHub auto-deploy** — Push to `main`, and your app redeploys automatically (Phase 2).
-- **Zero complexity** — All the grunt work happens in one script. You focus on code.
+## Getting Started
 
-## Getting Started (5 minutes)
+### 1. Open Cloud Shell
 
-**Step 1:** Open Cloud Shell
+Click the **Cloud Shell** button in your GCP project or visit: https://shell.cloud.google.com
+
+### 2. Clone and Deploy
+
 ```bash
-# Click the Cloud Shell icon in the GCP console, or go here:
-https://shell.cloud.google.com
-```
-
-**Step 2:** Clone and run
-```bash
-git clone https://github.com/hoyle1974/zilch-gcp.git && cd zilch-gcp
+git clone https://github.com/hoyle1974/zilch-gcp.git
+cd zilch-gcp
 chmod +x deploy.sh && ./deploy.sh
 ```
 
-**Step 3:** Answer prompts
-- Your GCP Project ID (e.g., `my-project-12345`)
-- App name (e.g., `my-cool-app`)
-- Region (us-central1, us-east1, or us-west1 — pick your nearest)
-- Which services you want (Firestore? Storage? Vertex AI?)
+### 3. Answer Configuration Prompts
 
-**Step 4:** Watch it build
-The script validates your setup, runs Terraform, and health-checks your app. You'll get a URL in 2-3 minutes. That's it.
+The script will ask for:
+- Your GCP Project ID
+- Application name
+- Target region (us-central1, us-east1, or us-west1)
+- Which optional services to enable (Firestore, Storage, Firebase Auth, etc.)
 
-**Step 5:** Deploy your code
+The deployment completes in 2-3 minutes. You'll receive a Cloud Run URL and environment variable names to use in your app.
+
+### 4. Deploy Your Code
+
 ```bash
-gcloud run deploy my-cool-app --source .
+gcloud run deploy YOUR_APP_NAME --source .
 ```
-Point it at any GitHub repo with a Dockerfile, and Cloud Build handles the rest.
+
+This builds and deploys your application. For automatic deployments on git push, enable Cloud Build during the initial setup.
 
 ## What Gets Provisioned?
 
-### Always Included
-- **Cloud Run** — Your app container. Scales to zero. 2M requests/month free.
-- **Service Account** — A locked-down identity for your app. Only gets permissions for services you enable.
-- **Remote Terraform State** — Lives in Cloud Storage. Safe, secure, shareable with your team.
+### Core
+- **Cloud Run Service** — Serverless container platform, auto-scaling, 2M requests/month free
+- **Service Account** — Least-privilege identity for your application
+- **Remote State Backend** — Terraform state stored in Cloud Storage
 
-### Pick What You Need
+### Optional Features
 
-| Service | When You'd Use It | Free Tier |
-|---------|------------------|-----------|
-| **Firestore** | Real-time data, user profiles, game state | 1GB storage, 50K reads/day |
-| **Secret Manager** | API keys, database passwords, tokens | 6 secrets free, 10K API calls/month |
-| **Cloud Storage** | User uploads, files, images, backups | 5GB storage, 1GB download/month |
-| **Firebase Auth** | User login with email, Google, GitHub, etc. | Unlimited users (same quotas as free tier) |
-| **Vertex AI** | Call Gemini (GPT-like) from your app | 60 requests/min |
-| **Pub/Sub** | Event streaming, message queues, async work | 10GB/month |
-| **Cloud Tasks** | Delayed jobs, retries, scheduled tasks | 1M tasks/month |
-| **BigQuery** | Analytics, SQL queries at scale | 1TB queried/month |
-| **Cloud KMS** | Encryption key management | 6 keys free, 10K calls/month |
-| **Vision AI** | Image recognition, OCR, object detection | 1K images/month |
-| **Speech-to-Text** | Convert audio to text | 60 minutes/month |
-| **Translation** | Translate between languages | 500K characters/month |
+| Feature | Free Tier | Enable Via |
+|---------|-----------|-----------|
+| Firestore NoSQL DB | 1GB storage, 50K reads/day | `enable_firestore` |
+| Secret Manager | 6 secrets, 10K API calls/month | `enable_secret_manager` |
+| Cloud Storage | 5GB storage, 1GB/month download | `enable_cloud_storage` |
+| Firebase Auth | Unlimited users | `enable_firebase_auth` |
+| Vertex AI | 60 requests/min (Gemini) | `enable_vertex_ai` |
+| Pub/Sub | 10 GB/month | `enable_pubsub` |
+| Cloud Tasks | 1M tasks/month | `enable_cloud_tasks` |
+| BigQuery | 1 TB queried/month | `enable_bigquery` |
+| Cloud KMS | 6 keys, 10K calls/month | `enable_cloud_kms` |
+| Vision AI | 1,000 images/month | `enable_vision_ai` |
+| Speech-to-Text | 60 minutes/month | `enable_speech_to_text` |
+| Translation | 500K characters/month | `enable_translation` |
 
 ## File Structure
 
@@ -96,42 +97,37 @@ zilch-gcp/
             └── 2026-06-15-zilch-phase-3-plan.md    # Phase 3 roadmap
 ```
 
-## Deploy Your Code
+## Deploying Your Application
 
-You have two options:
+### Manual Deployment
 
-### Option 1: One-Off Deploy (Manual)
 ```bash
-gcloud run deploy my-app --source .
+gcloud run deploy YOUR_APP_NAME --source .
 ```
-This builds your code once and deploys it. You trigger it manually. Good for testing locally.
 
-### Option 2: Auto-Deploy on Git Push (Recommended)
-During `./deploy.sh`, if you enable Cloud Build and provide your GitHub repo, Zilch wires up a webhook. Now every `git push main` auto-builds and auto-deploys. No manual steps. This is what you want for a real project.
+Builds and deploys your application from the current directory or a GitHub repository.
 
-**Which should you use?**
-- Testing locally? Manual deploy.
-- Shipping to production? Auto-deploy. Set it once, forget it, ship features.
+### Automatic Deployment (Phase 2)
 
-## Using Services in Your App
+If you enabled Cloud Build during `./deploy.sh`, every push to your GitHub repository's `main` branch automatically triggers a build and deployment. No manual steps required.
 
-Zilch injects environment variables into your Cloud Run container. Your app reads them to know what's available.
+To set this up during initial deployment, provide your GitHub repository owner and name when prompted.
+
+## Accessing Services from Your App
+
+Your Cloud Run service automatically receives environment variables for each enabled service:
 
 ```python
-# Python example: read an env var to know if Firestore is enabled
+# Example: Python app accessing Firestore
 import os
 from google.cloud import firestore
 
 if os.getenv('ZILCH_FIRESTORE_DATABASE'):
-    # Firestore is enabled. Set it up.
     db = firestore.Client(database=os.getenv('ZILCH_FIRESTORE_DATABASE'))
     docs = db.collection('users').get()
-else:
-    # Firestore wasn't enabled during setup. Skip it.
-    print("Firestore not available")
 ```
 
-All Google Cloud SDKs use **Application Default Credentials (ADC)** — meaning your app automatically authenticates as its service account. No API keys to manage. No credentials files to hide. Just works.
+All Google Cloud SDKs use **Application Default Credentials (ADC)**, which automatically authenticates as your app's service account.
 
 ## Environment Variables
 
@@ -163,28 +159,21 @@ gcloud run services describe YOUR_APP_NAME --region=us-central1
 
 ## Troubleshooting
 
-**"Active gcloud credential context not discovered"**
+### "Active gcloud credential context not discovered"
 ```bash
 gcloud auth login
 ```
-You need to be logged in. The script will tell you exactly what to do.
 
-**"Project not found"**
-Check your Project ID. Type it exactly as it appears in the GCP console (lowercase, with hyphens).
+### "Project not found"
+Double-check your Project ID and ensure you have IAM permissions.
 
-**"App deployed but health checks timed out"**
-Your container took too long to start or isn't listening on the right port.
-```bash
-# Check what's actually happening:
-gcloud run logs read my-app-name --region=us-central1 --limit=20
+### "App deployed but health checks timed out"
+- Check logs: `gcloud run logs read <app-name>`
+- Ensure your app listens on `$PORT` (default: 8080)
+- Check that startup completes within 5 minutes
 
-# Your app must listen on $PORT (defaults to 8080)
-# In Node: app.listen(process.env.PORT || 8080)
-# In Python: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
-```
-
-**"State bucket already exists"**
-Running deploy.sh twice? This is fine. Terraform will update what changed, create what's new, and leave the rest alone. You might see "1 changed, 0 added, 0 destroyed" — that's normal.
+### "State bucket already exists"
+This is normal on subsequent runs. Zilch reuses the existing bucket.
 
 ## Architecture & Design
 
@@ -208,35 +197,31 @@ All resources default to Always Free tier. Monitor usage at:
 
 https://console.cloud.google.com/billing/reports
 
-## Why Zilch?
+## Architecture & Design Details
 
-Most GCP guides assume you're an infrastructure person. You're not. You're building a feature, a game, a side project. Infrastructure is the tax you pay to ship it. Zilch pays that tax for you.
+See [`docs/superpowers/specs/`](docs/superpowers/specs/) for:
+- Phase 1 architecture and design decisions
+- Phase 2 CI/CD setup
+- Phase 3 service integration patterns
 
-**The problem Zilch solves:**
-- Clicking around the GCP console is slow and error-prone.
-- Most "quick start" guides are 10+ steps and you still miss an IAM permission.
-- Terraform is powerful but overkill when you just want Cloud Run + Firestore.
-- The Always Free tier is generous but easy to accidentally exceed.
+See [`docs/superpowers/plans/`](docs/superpowers/plans/) for the implementation roadmap.
 
-**What Zilch doesn't do:**
-- It's not a managed platform (like Heroku). You control your infrastructure via Terraform.
-- It doesn't hide GCP. You still use `gcloud` commands, Google Cloud SDKs, and GCP dashboards.
-- It's not a multi-cloud solution. If you want AWS, this isn't it.
+## Reference Application
 
-But if you want to ship a serverless app on GCP in minutes without hiring a DevOps person, you're in the right place.
+Clone [`zilch-reference-app`](https://github.com/hoyle1974/zilch-reference-app) to see a working example Flask application that demonstrates all Zilch services.
 
-## Next Steps
-
-1. **Read the reference app** — Clone [`zilch-reference-app`](https://github.com/hoyle1974/zilch-reference-app) to see a real Flask app using all Zilch services.
-2. **Check the design docs** — [`docs/superpowers/specs/`](docs/superpowers/specs/) explains the architecture and "why" behind each choice.
-3. **Deploy your own** — Customize deploy.sh for your team, or open an issue with ideas.
-
-## Contributing & Support
+## Contributing
 
 - Found a bug? [Create an issue](https://github.com/hoyle1974/zilch-gcp/issues)
 - Want to add a service? [See the extension guide](docs/PHASE_2_TEMPLATE.md)
-- Have questions? [Check GCP Free Tier docs](https://cloud.google.com/free/docs/always-free-usage-limits) or open a discussion
+- Have feedback? [Open a discussion](https://github.com/hoyle1974/zilch-gcp/discussions)
+
+## Support
+
+- 📚 [Google Cloud Free Tier Limits](https://cloud.google.com/free/docs/always-free-usage-limits)
+- 🔐 [Cloud Run Security Best Practices](https://cloud.google.com/run/docs/security)
+- 🛠️ [Terraform Google Provider Docs](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
 
 ## License
 
-MIT — Use this however you want. No restrictions.
+MIT License — See LICENSE file for details.
