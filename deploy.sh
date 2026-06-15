@@ -38,6 +38,13 @@ ENABLE_CLOUD_STORAGE="false"
 ENABLE_FIREBASE_AUTH="false"
 ENABLE_VERTEX_AI="false"
 ENABLE_CLOUD_BUILD="false"
+ENABLE_PUBSUB="false"
+ENABLE_CLOUD_TASKS="false"
+ENABLE_BIGQUERY="false"
+ENABLE_CLOUD_KMS="false"
+ENABLE_VISION_AI="false"
+ENABLE_SPEECH_TO_TEXT="false"
+ENABLE_TRANSLATION="false"
 GITHUB_OWNER=""
 GITHUB_REPO=""
 
@@ -55,6 +62,13 @@ if [ -f ".zilch.config" ]; then
     [ -n "$enable_firebase_auth" ] && ENABLE_FIREBASE_AUTH="$enable_firebase_auth"
     [ -n "$enable_vertex_ai" ] && ENABLE_VERTEX_AI="$enable_vertex_ai"
     [ -n "$enable_cloud_build" ] && ENABLE_CLOUD_BUILD="$enable_cloud_build"
+    [ -n "$enable_pubsub" ] && ENABLE_PUBSUB="$enable_pubsub"
+    [ -n "$enable_cloud_tasks" ] && ENABLE_CLOUD_TASKS="$enable_cloud_tasks"
+    [ -n "$enable_bigquery" ] && ENABLE_BIGQUERY="$enable_bigquery"
+    [ -n "$enable_cloud_kms" ] && ENABLE_CLOUD_KMS="$enable_cloud_kms"
+    [ -n "$enable_vision_ai" ] && ENABLE_VISION_AI="$enable_vision_ai"
+    [ -n "$enable_speech_to_text" ] && ENABLE_SPEECH_TO_TEXT="$enable_speech_to_text"
+    [ -n "$enable_translation" ] && ENABLE_TRANSLATION="$enable_translation"
     [ -n "$github_owner" ] && GITHUB_OWNER="$github_owner"
     [ -n "$github_repo" ] && GITHUB_REPO="$github_repo"
     echo "✓ Configuration loaded"
@@ -175,6 +189,16 @@ ENABLE_CLOUD_STORAGE=$(prompt_toggle "Cloud Storage Asset Buckets" "$ENABLE_CLOU
 ENABLE_CLOUD_BUILD=$(prompt_toggle "Cloud Build CI/CD (recommended)" "$ENABLE_CLOUD_BUILD")
 ENABLE_FIREBASE_AUTH=$(prompt_toggle "Firebase Social Authentication" "$ENABLE_FIREBASE_AUTH")
 ENABLE_VERTEX_AI=$(prompt_toggle "Vertex AI Gemini Platform" "$ENABLE_VERTEX_AI")
+
+# Phase 3: Advanced Services
+echo ""
+ENABLE_PUBSUB=$(prompt_toggle "Pub/Sub Event Streaming" "$ENABLE_PUBSUB")
+ENABLE_CLOUD_TASKS=$(prompt_toggle "Cloud Tasks Job Queues" "$ENABLE_CLOUD_TASKS")
+ENABLE_BIGQUERY=$(prompt_toggle "BigQuery Analytics Engine" "$ENABLE_BIGQUERY")
+ENABLE_CLOUD_KMS=$(prompt_toggle "Cloud KMS Encryption Keys" "$ENABLE_CLOUD_KMS")
+ENABLE_VISION_AI=$(prompt_toggle "Vision AI Image Processing" "$ENABLE_VISION_AI")
+ENABLE_SPEECH_TO_TEXT=$(prompt_toggle "Speech-to-Text Audio Transcription" "$ENABLE_SPEECH_TO_TEXT")
+ENABLE_TRANSLATION=$(prompt_toggle "Translation API Multi-Language" "$ENABLE_TRANSLATION")
 
 # If Cloud Build is enabled, GitHub info is required
 if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
@@ -386,7 +410,14 @@ if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
   -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
   -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
-  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}"; then
+  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
+  -var="enable_pubsub=${ENABLE_PUBSUB}" \
+  -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
+  -var="enable_bigquery=${ENABLE_BIGQUERY}" \
+  -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
+  -var="enable_vision_ai=${ENABLE_VISION_AI}" \
+  -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
+  -var="enable_translation=${ENABLE_TRANSLATION}"; then
     echo "❌ Terraform apply failed. Check the error above."
     echo "   Most common: insufficient permissions for required services."
     exit 1
