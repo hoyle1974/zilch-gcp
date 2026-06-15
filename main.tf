@@ -214,7 +214,7 @@ resource "google_cloudbuild_trigger" "app_build" {
   project     = var.gcp_project_id
   name        = "${var.app_name}-trigger"
   description = "Auto-build ${var.app_name} on push to main"
-  location    = var.gcp_region
+  location    = "global"
 
   # 2nd gen: Reference the repository connection
   repository_event_config {
@@ -485,14 +485,15 @@ resource "google_project_iam_member" "translate_client" {
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
 
 # 1. Firestore System Configuration Block
-resource "google_firestore_database" "default" {
-  count       = var.enable_firestore ? 1 : 0
-  project     = var.gcp_project_id
-  name        = "(default)"
-  location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
-  type        = "FIRESTORE_NATIVE"
-  depends_on  = [google_project_service.firestore]
-}
+# NOTE: Commented out - requires Owner role. Users can create via gcloud if needed.
+# resource "google_firestore_database" "default" {
+#   count       = var.enable_firestore ? 1 : 0
+#   project     = var.gcp_project_id
+#   name        = "(default)"
+#   location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
+#   type        = "FIRESTORE_NATIVE"
+#   depends_on  = [google_project_service.firestore]
+# }
 
 resource "google_project_iam_member" "firestore" {
   count   = var.enable_firestore ? 1 : 0
