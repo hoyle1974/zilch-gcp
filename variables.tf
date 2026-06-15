@@ -73,3 +73,45 @@ variable "enable_cloud_build" {
   default     = true
   description = "Enable Cloud Build CI/CD (recommended but optional)"
 }
+
+variable "enable_pubsub" {
+  type        = bool
+  default     = false
+  description = "Enable Pub/Sub for event streaming and messaging"
+}
+
+variable "enable_cloud_tasks" {
+  type        = bool
+  default     = false
+  description = "Enable Cloud Tasks for async job queues"
+}
+
+variable "enable_bigquery" {
+  type        = bool
+  default     = false
+  description = "Enable BigQuery for analytics and data warehousing"
+}
+
+variable "enable_cloud_kms" {
+  type        = bool
+  default     = false
+  description = "Enable Cloud KMS for encryption key management"
+}
+
+variable "enable_vision_ai" {
+  type        = bool
+  default     = false
+  description = "Enable Vision AI for image processing and analysis"
+}
+
+variable "enable_speech_to_text" {
+  type        = bool
+  default     = false
+  description = "Enable Speech-to-Text API for audio transcription"
+}
+
+variable "enable_translation" {
+  type        = bool
+  default     = false
+  description = "Enable Translation API for multi-language support"
+}
