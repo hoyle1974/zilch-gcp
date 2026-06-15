@@ -30,9 +30,9 @@ Phase 2 transforms Zilch from infrastructure-only into a **GitOps-enabled platfo
    └─ Developer pushes to main branch
    └─ Cloud Build triggers automatically
    └─ Builds container from Dockerfile
-   └─ Pushes to Artifact Registry
+   └─ Pushes to Artifact Registry (aggressive cleanup active)
    └─ Cloud Run pulls + deploys new image
-   └─ Optional: Terraform re-applies if infra changed
+   └─ Infrastructure stays locked to local ./deploy.sh updates
 ```
 
 ### Key Components
@@ -262,7 +262,7 @@ resource "google_artifact_registry_repository" "app_images" {
     condition {
       version_name_prefix = "sha256-"  # Delete old SHA-tagged builds
       older_than {
-        duration = "604800s"  # Keep last 7 days only
+        duration = "7d"  # Keep last 7 days only
       }
     }
   }
@@ -428,8 +428,8 @@ resource "google_cloudbuild_trigger" "app_build" {
 ### Artifact Registry
 
 - **Free tier:** 0.5 GB/month storage
-- **Zilch approach:** Keep last 5 images only (auto-cleanup)
-- **Result:** Typical app image: ~500MB - 1GB, so 5 images = rotate frequently, stay under limit
+- **Zilch approach:** Keep CURRENT (latest) + 1 PREVIOUS fallback image ONLY via aggressive cleanup
+- **Result:** Typical app image ~300MB (with layer caching) × 2 images = ~600MB max (safe margin under 0.5GB limit)
 
 ### Cloud Run
 
@@ -445,22 +445,23 @@ resource "google_cloudbuild_trigger" "app_build" {
 ```
 my-project/
 ├── Dockerfile              # Container definition
-├── .zilch.config          # Zilch configuration
-├── main.tf                # User's infra (Terraform)
-├── variables.tf           # Variables
+├── .zilch.config          # Zilch configuration (public-safe)
 ├── src/                   # App source code
 └── README.md
+
+Note: Terraform files stay LOCAL (not in repo)
+Users run: ./deploy.sh to apply infrastructure changes
 ```
 
 ### Workflow for Infra Changes
 
 User wants to add a Cloud SQL database:
-1. Edit `main.tf` (add `google_sql_database_instance` resource)
-2. Commit + push to `main`
-3. Cloud Build detects push
-4. Cloud Build runs `terraform apply`
-5. Database created in GCP
-6. App rebuilt and deployed
+1. Edit local Terraform files (add `google_sql_database_instance` resource)
+2. Run: `./deploy.sh` (applies changes locally, safely)
+3. Database created in GCP
+4. Commit updated `.zilch.config` + push to `main`
+5. Cloud Build auto-rebuilds app (knows new database is available)
+6. App deployed with database access
 
 ---
 
