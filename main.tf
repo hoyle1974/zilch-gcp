@@ -38,6 +38,12 @@ resource "google_project_service" "secretmanager" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "cloudbuild" {
+  count              = var.enable_cloud_build ? 1 : 0
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_service_account" "app" {
   account_id   = var.app_name
   display_name = "System Identity execution account for ${var.app_name}"
@@ -146,10 +152,8 @@ resource "google_artifact_registry_repository" "app_images" {
     id     = "delete-all-old"
     action = "DELETE"
     condition {
-      tag_state = "UNTAGGED"
-      older_than {
-        duration = "0s" # Delete ALL old builds immediately
-      }
+      tag_state  = "UNTAGGED"
+      older_than = "0s" # Delete ALL old builds immediately
     }
   }
 }
@@ -216,10 +220,7 @@ resource "google_cloudbuild_trigger" "app_build" {
   }
 
   # Use isolated service account (NOT default)
-  service_account = google_service_account.cloud_build[0].id
-
-  # Allow 10 minutes for full build + deploy cycle
-  timeout = "600s"
+  service_account = google_service_account.cloud_build.id
 
   depends_on = [
     google_artifact_registry_repository.app_images,
