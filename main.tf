@@ -485,17 +485,14 @@ resource "google_project_iam_member" "translate_client" {
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
 
 # 1. Firestore System Configuration Block
-# Firestore database creation requires Owner role in some GCP environments.
-# Uncomment if your account has sufficient permissions. Otherwise, users can
-# manually create via: gcloud firestore databases create --region=us-central1
-# resource "google_firestore_database" "default" {
-#   count       = var.enable_firestore ? 1 : 0
-#   project     = var.gcp_project_id
-#   name        = "(default)"
-#   location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
-#   type        = "FIRESTORE_NATIVE"
-#   depends_on  = [google_project_service.firestore]
-# }
+resource "google_firestore_database" "default" {
+  count       = var.enable_firestore ? 1 : 0
+  project     = var.gcp_project_id
+  name        = "(default)"
+  location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
+  type        = "FIRESTORE_NATIVE"
+  depends_on  = [google_project_service.firestore]
+}
 
 resource "google_project_iam_member" "firestore" {
   count   = var.enable_firestore ? 1 : 0
