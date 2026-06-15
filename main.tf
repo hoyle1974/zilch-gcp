@@ -207,21 +207,21 @@ resource "google_artifact_registry_repository" "app_images" {
   }
 }
 
-# Cloud Build trigger: watches GitHub main branch
+# Cloud Build trigger (2nd gen): watches GitHub main branch
 resource "google_cloudbuild_trigger" "app_build" {
   count = var.enable_cloud_build ? 1 : 0
 
   project     = var.gcp_project_id
   name        = "${var.app_name}-trigger"
   description = "Auto-build ${var.app_name} on push to main"
+  location    = var.gcp_region
 
-  # IMPORTANT: User must manually connect GitHub via GCP Console
-  # (GitHub OAuth cannot be done headlessly via Terraform)
-  github {
-    owner = var.github_owner
-    name  = var.github_repo
+  # 2nd gen: Reference the repository connection
+  repository_event_config {
+    repository = "projects/${var.gcp_project_id}/locations/${var.gcp_region}/connections/${var.github_owner}-${var.github_repo}"
+
     push {
-      branch = "^main$" # Only main branch triggers
+      branch = "^main$"
     }
   }
 
