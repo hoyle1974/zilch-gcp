@@ -207,6 +207,42 @@ if ! gcloud config set project "$PROJECT_ID" --quiet; then
     echo "⚠️  Warning: Could not set gcloud project context."
 fi
 
+# 5. Check if Cloud Build is enabled and validate GitHub connection
+if [ "$CLOUD_BUILD" == "true" ]; then
+    echo ""
+    echo "☁️ Phase 2: Cloud Build + GitOps Setup"
+    echo ""
+
+    # Check if GitHub is already connected
+    TRIGGER_EXISTS=$(gcloud builds triggers list --project="$PROJECT_ID" --filter="name:${APP_NAME}-trigger" --format="value(id)" 2>/dev/null | head -1)
+
+    if [ -z "$TRIGGER_EXISTS" ]; then
+        echo "⚠️  GitHub integration requires manual setup (GCP OAuth limitation)."
+        echo ""
+        echo "NEXT STEP: Click the link below to connect your GitHub repository:"
+        echo "👉 https://console.cloud.google.com/cloud-build/repositories?project=${PROJECT_ID}"
+        echo ""
+        echo "Instructions:"
+        echo "  1. Click 'Connect Repository'"
+        echo "  2. Select your GitHub account"
+        echo "  3. Select repository: ${GITHUB_OWNER}/${GITHUB_REPO}"
+        echo "  4. Click 'Connect' and authorize the Cloud Build GitHub App"
+        echo "  5. Return here and press ENTER to continue"
+        echo ""
+        read -p "Press ENTER once you've connected your GitHub repository..."
+
+        # Verify connection was successful
+        TRIGGER_EXISTS=$(gcloud builds triggers list --project="$PROJECT_ID" --filter="name:${APP_NAME}-trigger" --format="value(id)" 2>/dev/null | head -1)
+        if [ -z "$TRIGGER_EXISTS" ]; then
+            echo "⚠️  GitHub connection not detected yet. Continuing anyway..."
+            echo "The trigger will be created by Terraform. Manual GitHub link:"
+            echo "   https://console.cloud.google.com/cloud-build/repositories?project=${PROJECT_ID}"
+        fi
+    else
+        echo "✓ GitHub repository already connected"
+    fi
+fi
+
 # Also set ADC quota project to match (handles Application Default Credentials mismatch)
 if ! gcloud auth application-default set-quota-project "$PROJECT_ID" --quiet 2>/dev/null; then
     # Not critical if this fails - some ADC setups don't have quota projects
