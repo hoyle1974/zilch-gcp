@@ -148,6 +148,10 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_VISION_AI_ENABLED"
           value = var.enable_vision_ai ? "true" : ""
         }
+        env {
+          name  = "ZILCH_SPEECH_TO_TEXT_ENABLED"
+          value = var.enable_speech_to_text ? "true" : ""
+        }
       }
     }
   }
@@ -434,6 +438,25 @@ resource "google_project_iam_member" "vision_ai_user" {
   project = var.gcp_project_id
   role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+# Enable Speech-to-Text API
+resource "google_project_service" "speech_to_text" {
+  count   = var.enable_speech_to_text ? 1 : 0
+  service = "speech.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
+# IAM: Allow Cloud Run to use Speech-to-Text
+resource "google_project_iam_member" "speech_client" {
+  count   = var.enable_speech_to_text ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/speech.client"
+  member  = "serviceAccount:${google_service_account.app.email}"
+
+  depends_on = [google_project_service.speech_to_text]
 }
 
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
