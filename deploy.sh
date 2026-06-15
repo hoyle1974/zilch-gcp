@@ -376,7 +376,7 @@ echo ""
 echo "📋 Available Runtime Application Discovery Environment Tunnels:"
 if [ "$FIRESTORE" == "true" ]; then echo "  ↳ ZILCH_FIRESTORE_DATABASE : (default)"; fi
 if [ "$SECRETS" == "true" ]; then echo "  ↳ ZILCH_SECRET_PREFIX      : ${APP_NAME}-"; fi
-if [ "$STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : ${APP_NAME}-storage-$(terraform output -raw storage_bucket 2>/dev/null || echo 'SUFFIX')"; fi
+if [ "$STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform output -raw storage_bucket 2>/dev/null)"; fi
 if [ "$VERTEX" == "true" ]; then echo "  ↳ ZILCH_VERTEX_AI_ENABLED  : true"; fi
 if [ "$FIREBASE" == "true" ]; then echo "  ↳ ZILCH_FIREBASE_ENABLED   : true"; fi
 echo ""

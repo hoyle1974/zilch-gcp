@@ -127,6 +127,14 @@ resource "google_cloud_run_service" "app" {
       }
     }
   }
+
+  # Prevents Terraform from overwriting Cloud Build deployments
+  lifecycle {
+    ignore_changes = [
+      template[0].spec[0].containers[0].image
+    ]
+  }
+
   depends_on = [google_project_service.run]
 }
 
@@ -154,6 +162,15 @@ resource "google_artifact_registry_repository" "app_images" {
     condition {
       tag_state  = "UNTAGGED"
       older_than = "0s" # Delete ALL old builds immediately
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-old-tags"
+    action = "DELETE"
+    condition {
+      tag_state  = "TAGGED"
+      older_than = "7d" # Keep last 7 days only
     }
   }
 }
