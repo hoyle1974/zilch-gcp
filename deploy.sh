@@ -344,7 +344,7 @@ TF_INIT_RETRIES=0
 TF_MAX_RETRIES=3
 
 while [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; do
-    if terraform init \
+    if terraform -chdir="$(dirname "$0")" init \
         -backend-config="bucket=${STATE_BUCKET}" \
         -backend-config="prefix=terraform/state" \
         -reconfigure 2>&1; then
@@ -375,7 +375,7 @@ if [ "$TF_INIT_SUCCESS" = false ]; then
 fi
 
 echo "🏗️ Applying architectural blueprint definitions to Google Cloud..."
-if ! terraform apply -auto-approve \
+if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
   -var="gcp_region=${GCP_REGION}" \
@@ -393,7 +393,7 @@ if ! terraform apply -auto-approve \
 fi
 
 # 8. Post-Deployment Endpoint Performance Validation Checks
-RUN_URL=$(terraform output -raw cloud_run_url)
+RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url)
 echo ""
 echo "🔍 Initiating app endpoint connection checks at: ${RUN_URL}"
 
@@ -423,13 +423,13 @@ echo "================================================================="
 echo " 🎉 SUCCESS: Zilch Architecture Instantiated Successfully! "
 echo "================================================================="
 echo "📍 Service Endpoint URL: ${RUN_URL}"
-echo "👤 Bound Run Identity:   $(terraform output -raw service_account_email)"
+echo "👤 Bound Run Identity:   $(terraform -chdir="$(dirname "$0")" output -raw service_account_email)"
 echo "🌐 Operational Region:   ${GCP_REGION}"
 echo ""
 echo "📋 Available Runtime Application Discovery Environment Tunnels:"
 if [ "$ENABLE_FIRESTORE" == "true" ]; then echo "  ↳ ZILCH_FIRESTORE_DATABASE : (default)"; fi
 if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then echo "  ↳ ZILCH_SECRET_PREFIX      : ${APP_NAME}-"; fi
-if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform output -raw storage_bucket 2>/dev/null)"; fi
+if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform -chdir="$(dirname "$0")" output -raw storage_bucket 2>/dev/null)"; fi
 if [ "$ENABLE_VERTEX_AI" == "true" ]; then echo "  ↳ ZILCH_VERTEX_AI_ENABLED  : true"; fi
 if [ "$ENABLE_FIREBASE_AUTH" == "true" ]; then echo "  ↳ ZILCH_FIREBASE_ENABLED   : true"; fi
 echo ""
