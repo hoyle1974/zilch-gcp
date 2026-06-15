@@ -136,6 +136,10 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_CLOUD_TASKS_QUEUE"
           value = var.enable_cloud_tasks ? "projects/${var.gcp_project_id}/locations/${var.gcp_region}/queues/${var.app_name}-jobs" : ""
         }
+        env {
+          name  = "ZILCH_BIGQUERY_DATASET"
+          value = var.enable_bigquery ? google_bigquery_dataset.app_analytics[0].dataset_id : ""
+        }
       }
     }
   }
@@ -339,6 +343,41 @@ resource "google_project_iam_member" "cloud_tasks_enqueuer" {
   count   = var.enable_cloud_tasks ? 1 : 0
   project = var.gcp_project_id
   role    = "roles/cloudtasks.enqueuer"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+# Enable BigQuery API
+resource "google_project_service" "bigquery" {
+  count   = var.enable_bigquery ? 1 : 0
+  service = "bigquery.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
+# BigQuery dataset for analytics
+resource "google_bigquery_dataset" "app_analytics" {
+  count = var.enable_bigquery ? 1 : 0
+
+  dataset_id                  = "${replace(var.app_name, "-", "_")}_analytics"
+  friendly_name               = "${var.app_name} Analytics"
+  description                 = "Analytics dataset for ${var.app_name}"
+  location                    = var.gcp_region == "us-central1" ? "US" : var.gcp_region == "us-east1" ? "US" : "US"
+  default_table_expiration_ms = 7776000000 # 90 days (free tier quota management)
+  project                     = var.gcp_project_id
+
+  labels = {
+    app = var.app_name
+  }
+
+  depends_on = [google_project_service.bigquery[0]]
+}
+
+# IAM: Allow Cloud Run to write to BigQuery
+resource "google_project_iam_member" "bigquery_data_editor" {
+  count   = var.enable_bigquery ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/bigquery.dataEditor"
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
