@@ -144,6 +144,10 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_KMS_KEY_ID"
           value = var.enable_cloud_kms ? google_kms_crypto_key.app_key[0].id : ""
         }
+        env {
+          name  = "ZILCH_VISION_AI_ENABLED"
+          value = var.enable_vision_ai ? "true" : ""
+        }
       }
     }
   }
@@ -421,6 +425,14 @@ resource "google_project_iam_member" "kms_crypto_key_encrypter_decrypter" {
   count   = var.enable_cloud_kms ? 1 : 0
   project = var.gcp_project_id
   role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+# IAM: Allow Cloud Run to use Vision AI
+resource "google_project_iam_member" "vision_ai_user" {
+  count   = var.enable_vision_ai ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
