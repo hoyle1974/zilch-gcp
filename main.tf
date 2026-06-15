@@ -124,6 +124,14 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_FIREBASE_ENABLED"
           value = var.enable_firebase_auth ? "true" : ""
         }
+        env {
+          name  = "ZILCH_PUBSUB_TOPIC"
+          value = var.enable_pubsub ? google_pubsub_topic.app_events[0].name : ""
+        }
+        env {
+          name  = "ZILCH_PUBSUB_SUBSCRIPTION"
+          value = var.enable_pubsub ? google_pubsub_subscription.app_events_sub[0].name : ""
+        }
       }
     }
   }
@@ -246,6 +254,39 @@ resource "google_cloudbuild_trigger" "app_build" {
     google_project_iam_member.builder_cloud_run,
     google_project_iam_member.builder_iam
   ]
+}
+
+# --- PHASE 3: ADVANCED SERVICES ---
+
+# Pub/Sub Topic for event streaming
+resource "google_pubsub_topic" "app_events" {
+  count = var.enable_pubsub ? 1 : 0
+
+  name                       = "${var.app_name}-events"
+  message_retention_duration = "86400s" # 24 hours (free tier acceptable)
+  project                    = var.gcp_project_id
+
+  labels = {
+    app = var.app_name
+  }
+}
+
+# Pub/Sub Subscription for consuming events
+resource "google_pubsub_subscription" "app_events_sub" {
+  count = var.enable_pubsub ? 1 : 0
+
+  name                 = "${var.app_name}-events-subscription"
+  topic                = google_pubsub_topic.app_events[0].name
+  ack_deadline_seconds = 20
+  project              = var.gcp_project_id
+}
+
+# IAM: Allow Cloud Run service account to publish/subscribe
+resource "google_project_iam_member" "pubsub_editor" {
+  count   = var.enable_pubsub ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/pubsub.editor"
+  member  = "serviceAccount:${google_service_account.app.email}"
 }
 
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
