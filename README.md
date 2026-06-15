@@ -57,6 +57,13 @@ Within 2-3 minutes, your app will be live.
 | Cloud Storage | 5GB storage, 1GB/month download | `enable_cloud_storage` |
 | Firebase Auth | Unlimited users | `enable_firebase_auth` |
 | Vertex AI | 60 requests/min (Gemini) | `enable_vertex_ai` |
+| Pub/Sub | 10 GB/month | `enable_pubsub` |
+| Cloud Tasks | 1M tasks/month | `enable_cloud_tasks` |
+| BigQuery | 1 TB queried/month | `enable_bigquery` |
+| Cloud KMS | 6 keys, 10K calls/month | `enable_cloud_kms` |
+| Vision AI | 1,000 images/month | `enable_vision_ai` |
+| Speech-to-Text | 60 minutes/month | `enable_speech_to_text` |
+| Translation | 500K characters/month | `enable_translation` |
 
 ## File Structure
 
@@ -64,8 +71,8 @@ Within 2-3 minutes, your app will be live.
 zilch-gcp/
 ├── deploy.sh                    # Interactive setup + GitHub integration
 ├── tutorial.md                  # Includes Phase 2 GitOps workflow
-├── main.tf                      # Phase 1 + Phase 2 infrastructure
-├── variables.tf                 # Includes GitHub and Cloud Build vars
+├── main.tf                      # Phase 1 + Phase 2 + Phase 3 infrastructure
+├── variables.tf                 # Includes all service toggle variables
 ├── outputs.tf                   # Includes Cloud Build outputs
 ├── .zilch.config.example        # Phase 2: Template for GitHub repo
 ├── backend.tf                   # Remote state configuration
@@ -155,12 +162,13 @@ For detailed architecture decisions, production guarantees, and design rationale
 
 📖 **[Zilch MVP Design Specification](docs/superpowers/specs/2026-06-13-zilch-mvp-design.md)**
 
-## Phase 2 & 3 (Future)
+## Phase 2 & 3 (Advanced Features)
 
-**Phase 2:** Cloud Build + Artifact Registry (automated container builds)  
-**Phase 3:** Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text
+**Phase 2:** Cloud Build + Artifact Registry (automatic container builds) — ✅ Complete
 
-See `docs/PHASE_2_TEMPLATE.md` for how to contribute new services.
+**Phase 3:** Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation APIs — In Progress
+
+See `docs/superpowers/plans/` for implementation roadmap.
 
 ## Cost & Quotas
 
