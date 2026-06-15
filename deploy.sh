@@ -108,8 +108,34 @@ prompt_toggle() {
 FIRESTORE=$(prompt_toggle "Firestore NoSQL Database")
 SECRETS=$(prompt_toggle "Secret Manager Keys")
 STORAGE=$(prompt_toggle "Cloud Storage Asset Buckets")
+
+CLOUD_BUILD=$(prompt_toggle "Cloud Build CI/CD (recommended)")
 FIREBASE=$(prompt_toggle "Firebase Social Authentication")
 VERTEX=$(prompt_toggle "Vertex AI Gemini Platform")
+
+# Read .zilch.config if it exists (for GitHub integration)
+GITHUB_OWNER=""
+GITHUB_REPO=""
+if [ -f ".zilch.config" ]; then
+    echo ""
+    echo "📋 Reading .zilch.config..."
+    source .zilch.config
+    echo "✓ Configuration loaded"
+fi
+
+# If Cloud Build is enabled, GitHub info is required
+if [ "$CLOUD_BUILD" == "true" ]; then
+    if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
+        echo ""
+        echo "❌ Error: Cloud Build enabled but GitHub not configured in .zilch.config"
+        echo ""
+        echo "Add these to .zilch.config:"
+        echo "  github_owner=your-username"
+        echo "  github_repo=your-repo"
+        echo ""
+        exit 1
+    fi
+fi
 
 # 6. Automate State Bucket Isolation (The Bootstrap)
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
@@ -300,6 +326,9 @@ if ! terraform apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
   -var="gcp_region=${REGION}" \
+  -var="github_owner=${GITHUB_OWNER}" \
+  -var="github_repo=${GITHUB_REPO}" \
+  -var="enable_cloud_build=${CLOUD_BUILD}" \
   -var="enable_firestore=${FIRESTORE}" \
   -var="enable_secret_manager=${SECRETS}" \
   -var="enable_cloud_storage=${STORAGE}" \
