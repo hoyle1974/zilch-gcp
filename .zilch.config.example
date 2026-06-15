@@ -20,6 +20,15 @@ github_repo=your-repository-name
 # enable_vertex_ai=false
 # enable_cloud_build=true
 
+# Phase 3: Advanced Services
+# enable_pubsub=false
+# enable_cloud_tasks=false
+# enable_bigquery=false
+# enable_cloud_kms=false
+# enable_vision_ai=false
+# enable_speech_to_text=false
+# enable_translation=false
+
 # Notes:
 # - This file is PUBLIC-SAFE (OK to commit to GitHub)
 # - NEVER put passwords, API keys, or credentials here
