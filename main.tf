@@ -132,6 +132,10 @@ resource "google_cloud_run_service" "app" {
           name  = "ZILCH_PUBSUB_SUBSCRIPTION"
           value = var.enable_pubsub ? google_pubsub_subscription.app_events_sub[0].name : ""
         }
+        env {
+          name  = "ZILCH_CLOUD_TASKS_QUEUE"
+          value = var.enable_cloud_tasks ? "projects/${var.gcp_project_id}/locations/${var.gcp_region}/queues/${var.app_name}-jobs" : ""
+        }
       }
     }
   }
@@ -258,9 +262,19 @@ resource "google_cloudbuild_trigger" "app_build" {
 
 # --- PHASE 3: ADVANCED SERVICES ---
 
+# Enable Pub/Sub API
+resource "google_project_service" "pubsub" {
+  count   = var.enable_pubsub ? 1 : 0
+  service = "pubsub.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
 # Pub/Sub Topic for event streaming
 resource "google_pubsub_topic" "app_events" {
-  count = var.enable_pubsub ? 1 : 0
+  count      = var.enable_pubsub ? 1 : 0
+  depends_on = [google_project_service.pubsub[0]]
 
   name                       = "${var.app_name}-events"
   message_retention_duration = "86400s" # 24 hours (free tier acceptable)
@@ -273,7 +287,8 @@ resource "google_pubsub_topic" "app_events" {
 
 # Pub/Sub Subscription for consuming events
 resource "google_pubsub_subscription" "app_events_sub" {
-  count = var.enable_pubsub ? 1 : 0
+  count      = var.enable_pubsub ? 1 : 0
+  depends_on = [google_project_service.pubsub[0]]
 
   name                 = "${var.app_name}-events-subscription"
   topic                = google_pubsub_topic.app_events[0].name
@@ -286,6 +301,44 @@ resource "google_project_iam_member" "pubsub_editor" {
   count   = var.enable_pubsub ? 1 : 0
   project = var.gcp_project_id
   role    = "roles/pubsub.editor"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+# Enable Cloud Tasks API
+resource "google_project_service" "cloud_tasks" {
+  count   = var.enable_cloud_tasks ? 1 : 0
+  service = "cloudtasks.googleapis.com"
+  project = var.gcp_project_id
+
+  disable_on_destroy = false
+}
+
+# Cloud Tasks queue for async job processing
+resource "google_cloud_tasks_queue" "app_jobs" {
+  count = var.enable_cloud_tasks ? 1 : 0
+
+  name     = "projects/${var.gcp_project_id}/locations/${var.gcp_region}/queues/${var.app_name}-jobs"
+  location = var.gcp_region
+
+  rate_limits {
+    max_concurrent_dispatches = 100
+    max_dispatches_per_second = 100
+  }
+
+  retry_config {
+    max_attempts = 5
+    min_backoff  = "0.1s"
+    max_backoff  = "3600s"
+  }
+
+  depends_on = [google_project_service.cloud_tasks[0]]
+}
+
+# IAM: Allow Cloud Run to dispatch tasks
+resource "google_project_iam_member" "cloud_tasks_enqueuer" {
+  count   = var.enable_cloud_tasks ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/cloudtasks.enqueuer"
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
