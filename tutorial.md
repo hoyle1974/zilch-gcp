@@ -99,6 +99,87 @@ https://cloud.google.com/free/docs/always-free-usage-limits
 
 ---
 
+## Phase 2: Cloud Build + GitOps (Automatic Deployment)
+
+After the initial `./deploy.sh` setup, your app is ready for **continuous deployment**. Every push to your GitHub repository automatically triggers a build and deployment.
+
+### How GitOps Works
+
+1. **Code changes pushed to GitHub**
+   ```bash
+   git push origin main
+   ```
+
+2. **Cloud Build auto-detects the push**
+   - Watches your repository (GitHub App connection)
+   - Triggers immediately on push to `main` branch
+
+3. **Cloud Build pipeline runs automatically**
+   - Builds your container from `Dockerfile`
+   - Pushes the image to Artifact Registry
+   - Deploys to Cloud Run (zero downtime)
+
+4. **Your app is live** (~5 minutes from push)
+
+### Configuration: .zilch.config
+
+Your GitHub repository contains `.zilch.config` - the source of truth for your deployment:
+
+```
+github_owner=your-username
+github_repo=your-repo
+gcp_project_id=your-project
+enable_firestore=true
+enable_cloud_build=true
+# ... other toggles
+```
+
+**Important:** `.zilch.config` is PUBLIC-SAFE. Never put secrets here. Use GCP Secret Manager instead.
+
+### Changing Infrastructure After Initial Deploy
+
+To modify your infrastructure (e.g., add Firestore or enable new services):
+
+1. **Edit `.zilch.config`** in your repo (locally or via GitHub web editor)
+2. **Run `./deploy.sh` locally**
+   ```bash
+   ./deploy.sh  # Re-runs Terraform with new settings
+   ```
+3. **Push the updated `.zilch.config`** to GitHub
+   ```bash
+   git commit -am "chore: enable Firestore"
+   git push origin main
+   ```
+4. **Cloud Build rebuilds** your app with the new infrastructure available
+
+**Key Rule:** Infrastructure updates happen via `./deploy.sh` (local), not via git push. This prevents the deployment pipeline from corrupting itself.
+
+### Rebuilding from Git History
+
+If your current deployed image has a bug:
+1. **Fix the code** and push to main
+2. **Cloud Build automatically rebuilds** from the updated code
+3. **New image deploys** (old image is discarded)
+
+That's it—no manual rollback needed. All your code history is in git.
+
+### Troubleshooting Cloud Build
+
+**Build is stuck or slow:**
+- Cloud Build takes 3-5 minutes (typical)
+- Check progress: `gcloud builds log -stream LATEST --region=us-central1 --project=PROJECT_ID`
+
+**Build failed - what to check:**
+1. Dockerfile exists in repo root
+2. Docker image builds locally: `docker build .`
+3. Recent changes broke the build? Check git history
+
+**No automatic deployments:**
+- GitHub integration required manual setup (see initial deploy output)
+- Verify Cloud Build trigger: `gcloud builds triggers list --project=PROJECT_ID`
+
+---
+
 ## 5. Troubleshooting
 
 **"Error: Active gcloud credential context not discovered"**
