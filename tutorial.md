@@ -180,6 +180,87 @@ That's it—no manual rollback needed. All your code history is in git.
 
 ---
 
+## Phase 3: Advanced Services (Optional)
+
+Phase 3 adds specialized services for event-driven architecture, data analytics, encryption, and AI capabilities.
+
+### Pub/Sub - Event Streaming
+
+Asynchronous messaging for decoupled application components. Publish events from your app and subscribe to them from other services.
+
+**Free tier:** 10 GB/month of throughput
+
+**Env vars:**
+- `ZILCH_PUBSUB_TOPIC` — Topic name for publishing events
+- `ZILCH_PUBSUB_SUBSCRIPTION` — Subscription name for consuming events
+
+**Example usage:**
+```python
+import os
+from google.cloud import pubsub_v1
+
+if os.getenv('ZILCH_PUBSUB_TOPIC'):
+    publisher = pubsub_v1.PublisherClient()
+    topic_path = publisher.topic_path(os.getenv('GOOGLE_CLOUD_PROJECT'), os.getenv('ZILCH_PUBSUB_TOPIC'))
+    publisher.publish(topic_path, b"event data")
+```
+
+### Cloud Tasks - Async Job Queues
+
+Schedule and dispatch tasks to be processed asynchronously. Perfect for sending emails, processing images, or long-running operations.
+
+**Free tier:** 1 million tasks/month
+
+**Env var:**
+- `ZILCH_CLOUD_TASKS_QUEUE` — Queue path for dispatching tasks
+
+### BigQuery - Analytics & Data Warehousing
+
+Serverless analytics warehouse for querying massive datasets. Store application events and run analytics.
+
+**Free tier:** 1 TB of queried data per month
+
+**Env var:**
+- `ZILCH_BIGQUERY_DATASET` — Dataset ID for storing analytics data
+
+### Cloud KMS - Encryption Key Management
+
+Manage encryption keys for sensitive data. Use for encrypting customer data, API keys, and other secrets at rest.
+
+**Free tier:** 6 active keys, 10K API calls/month
+
+**Env var:**
+- `ZILCH_KMS_KEY_ID` — Crypto key ID for encryption/decryption
+
+### Vision AI - Image Processing
+
+Analyze images using Google's machine learning models. Detect objects, faces, text, and more.
+
+**Free tier:** 1,000 images/month
+
+**Env var:**
+- `ZILCH_VISION_AI_ENABLED` — Set to "true" if enabled
+
+### Speech-to-Text - Audio Transcription
+
+Convert audio to text using automatic speech recognition.
+
+**Free tier:** 60 minutes/month
+
+**Env var:**
+- `ZILCH_SPEECH_TO_TEXT_ENABLED` — Set to "true" if enabled
+
+### Translation API - Multi-Language Support
+
+Translate text between 100+ languages programmatically.
+
+**Free tier:** 500K characters/month
+
+**Env var:**
+- `ZILCH_TRANSLATION_ENABLED` — Set to "true" if enabled
+
+---
+
 ## 5. Troubleshooting
 
 **"Error: Active gcloud credential context not discovered"**
