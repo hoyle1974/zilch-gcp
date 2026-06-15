@@ -207,19 +207,18 @@ resource "google_artifact_registry_repository" "app_images" {
   }
 }
 
-# Cloud Build trigger (2nd gen): watches GitHub main branch
+# Cloud Build trigger: watches GitHub main branch
 resource "google_cloudbuild_trigger" "app_build" {
   count = var.enable_cloud_build ? 1 : 0
 
   project     = var.gcp_project_id
   name        = "${var.app_name}-trigger"
   description = "Auto-build ${var.app_name} on push to main"
-  location    = "global"
 
-  # 2nd gen: Reference the repository connection
-  repository_event_config {
-    repository = "projects/${var.gcp_project_id}/locations/${var.gcp_region}/connections/${var.github_owner}-${var.github_repo}"
-
+  # 1st gen: GitHub block (proven working)
+  github {
+    owner = var.github_owner
+    name  = var.github_repo
     push {
       branch = "^main$"
     }
