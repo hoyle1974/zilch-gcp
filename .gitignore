@@ -23,3 +23,6 @@ build/
 
 # Logs
 *.log
+
+# Zilch Configuration
+.zilch.config

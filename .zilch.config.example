@@ -1,0 +1,27 @@
+# Zilch Configuration File
+# Copy this to .zilch.config in your GitHub repository (do NOT commit secrets here)
+
+# GitHub Integration (required for Cloud Build)
+# Get these values from your GitHub account/repo
+github_owner=your-github-username-or-org
+github_repo=your-repository-name
+
+# GCP Configuration (optional - overrides deploy.sh prompts)
+# gcp_project_id=my-gcp-project
+# gcp_region=us-central1
+# app_name=my-app
+
+# Optional Features (Phase 1 + Phase 2)
+# Set to true to enable, false to disable
+# enable_firestore=false
+# enable_secret_manager=false
+# enable_cloud_storage=false
+# enable_firebase_auth=false
+# enable_vertex_ai=false
+# enable_cloud_build=true
+
+# Notes:
+# - This file is PUBLIC-SAFE (OK to commit to GitHub)
+# - NEVER put passwords, API keys, or credentials here
+# - Use GCP Secret Manager for runtime secrets
+# - Use GitHub Secrets for build-time secrets (if needed)
