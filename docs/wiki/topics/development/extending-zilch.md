@@ -1,4 +1,4 @@
-# Adding Phase 2 & 3 Services to Zilch
+# Extending Zilch with New Services
 
 This guide shows exactly how to add new services (like Cloud Build, BigQuery, etc.) following Zilch's architectural patterns.
 
@@ -171,11 +171,11 @@ if [ "$CLOUD_BUILD" == "true" ]; then
 fi
 ```
 
-### Step 9: Update Documentation
+### Step 9: Update Wiki Documentation
 
-- **tutorial.md:** Add a brief description under "Understanding the Services"
-- **README.md:** Add the service to the feature table
-- **This template:** Update example references if needed
+- Add an entity page in `docs/wiki/entities/services/<service>.md`
+- Link it to the [Services Directory](../../INDEX.md)
+- Include use cases, configuration, and examples
 
 ---
 
@@ -354,13 +354,10 @@ Before submitting a PR to add a new service:
 - [ ] Updated `deploy.sh` with prompt and terraform apply var
 - [ ] Updated `deploy.sh` summary section
 - [ ] Added post-deploy validation (if applicable)
-- [ ] Updated `tutorial.md` with service description
-- [ ] Updated `README.md` feature table
+- [ ] Created wiki service entity page
 - [ ] Ran `terraform validate` successfully
 - [ ] Tested `./deploy.sh` end-to-end
 
 ---
 
-## Questions?
-
-Refer to the [Zilch MVP Design Specification](superpowers/specs/2026-06-13-zilch-mvp-design.md) for architectural decisions and rationale.
+**Link:** [Terraform](../../entities/terraform.md) | [Service Accounts & IAM](../../entities/service-accounts.md) | [Environment Variables](../../entities/environment-variables.md)
