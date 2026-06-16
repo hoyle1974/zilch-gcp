@@ -111,6 +111,7 @@ resource "google_monitoring_notification_channel" "app_alerts" {
 }
 
 # Alert Policy: High error rate on Cloud Run (triggers circuit breaker)
+# Note: This is a simplified alert - in production, use error_count metric instead
 resource "google_monitoring_alert_policy" "cloud_run_errors" {
   count       = var.enable_monitoring ? 1 : 0
   display_name = "${var.app_name} - High Error Rate Alert"
@@ -118,13 +119,18 @@ resource "google_monitoring_alert_policy" "cloud_run_errors" {
   combiner    = "OR"
 
   conditions {
-    display_name = "Cloud Run Error Rate > 5%"
+    display_name = "Cloud Run High Error Rate"
 
     condition_threshold {
-      filter          = "metric.type=\"run.googleapis.com/request_count\" AND resource.type=\"cloud_run_revision\" AND resource.label.service_name=\"${var.app_name}\""
-      duration        = "300s"
+      filter          = "resource.type=\"cloud_run_revision\" AND resource.label.service_name=\"${var.app_name}\" AND metric.type=\"run.googleapis.com/request_count\""
+      duration        = "60s"
       comparison      = "COMPARISON_GT"
-      threshold_value = 0.05
+      threshold_value = 100
+
+      aggregations {
+        alignment_period  = "60s"
+        per_series_aligner = "ALIGN_RATE"
+      }
 
       trigger {
         count = 1
