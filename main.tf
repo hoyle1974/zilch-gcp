@@ -180,6 +180,7 @@ resource "google_cloud_run_v2_service" "app" {
 }
 
 resource "google_cloud_run_service_iam_member" "public" {
+  count    = var.allow_unauthenticated_access ? 1 : 0
   service  = google_cloud_run_v2_service.app.name
   location = google_cloud_run_v2_service.app.location
   role     = "roles/run.invoker"
@@ -263,14 +264,16 @@ resource "google_cloudbuild_trigger" "app_build" {
     step {
       name       = "gcr.io/google.com/cloudsdktool/cloud-sdk"
       entrypoint = "gcloud"
-      args = [
-        "run", "deploy", var.app_name,
-        "--image", "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app:latest",
-        "--region", var.gcp_region,
-        "--service-account", google_service_account.app.email,
-        "--platform", "managed",
-        "--allow-unauthenticated"
-      ]
+      args = concat(
+        [
+          "run", "deploy", var.app_name,
+          "--image", "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.app_images[0].repository_id}/app:latest",
+          "--region", var.gcp_region,
+          "--service-account", google_service_account.app.email,
+          "--platform", "managed"
+        ],
+        var.allow_unauthenticated_access ? ["--allow-unauthenticated"] : ["--no-allow-unauthenticated"]
+      )
       id       = "deploy-run"
       wait_for = ["push-image"]
     }

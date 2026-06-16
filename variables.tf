@@ -159,3 +159,9 @@ variable "billing_budget_limit_usd" {
   default     = 10
   description = "Monthly billing budget threshold in USD for alert triggers"
 }
+
+variable "allow_unauthenticated_access" {
+  type        = bool
+  default     = true
+  description = "Allow unauthenticated access to Cloud Run service (set to false for internal-only services like background workers or APIs)"
+}
