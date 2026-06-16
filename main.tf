@@ -92,6 +92,14 @@ resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
 
+resource "random_id" "queue_suffix" {
+  byte_length = 2
+}
+
+resource "random_id" "kms_suffix" {
+  byte_length = 2
+}
+
 # --- CLOUD RUN CONTAINER BLUEPRINT ORCHESTRATION ---
 
 resource "google_cloud_run_v2_service" "app" {
@@ -372,7 +380,7 @@ resource "google_project_service" "cloud_tasks" {
 resource "google_cloud_tasks_queue" "app_jobs" {
   count = var.enable_cloud_tasks ? 1 : 0
 
-  name     = "${var.app_name}-jobs"
+  name     = "${var.app_name}-jobs-${random_id.queue_suffix.hex}"
   location = var.gcp_region
 
   rate_limits {
@@ -444,7 +452,7 @@ resource "google_project_service" "kms" {
 # Cloud KMS keyring for encryption
 resource "google_kms_key_ring" "app_keys" {
   count    = var.enable_cloud_kms ? 1 : 0
-  name     = "${var.app_name}-keyring"
+  name     = "${var.app_name}-keyring-${random_id.kms_suffix.hex}"
   location = var.gcp_region
   project  = var.gcp_project_id
 
