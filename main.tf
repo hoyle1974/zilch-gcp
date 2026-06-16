@@ -99,9 +99,8 @@ resource "google_cloud_run_v2_service" "app" {
   location = var.gcp_region
 
   template {
-    service_account = google_service_account.app.email
-    # Note: startup_cpu_boost can be enabled via:
-    # gcloud run services update APP_NAME --region=REGION --cpu-boost
+    service_account  = google_service_account.app.email
+    startup_cpu_boost = true
 
     containers {
       image = "gcr.io/cloudrun/hello:latest"
