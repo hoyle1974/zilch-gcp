@@ -45,6 +45,13 @@ ENABLE_CLOUD_KMS="false"
 ENABLE_VISION_AI="false"
 ENABLE_SPEECH_TO_TEXT="false"
 ENABLE_TRANSLATION="false"
+ENABLE_SCHEDULER="false"
+ENABLE_MONITORING="false"
+SCHEDULER_SCHEDULE="0 0 * * *"
+SCHEDULER_TIMEZONE="UTC"
+SCHEDULER_ENDPOINT="/api/cron"
+BILLING_ACCOUNT_NAME="My Billing Account"
+BILLING_BUDGET_LIMIT_USD="10"
 GITHUB_OWNER=""
 GITHUB_REPO=""
 
@@ -69,6 +76,13 @@ if [ -f ".zilch.config" ]; then
     [ -n "$enable_vision_ai" ] && ENABLE_VISION_AI="$enable_vision_ai"
     [ -n "$enable_speech_to_text" ] && ENABLE_SPEECH_TO_TEXT="$enable_speech_to_text"
     [ -n "$enable_translation" ] && ENABLE_TRANSLATION="$enable_translation"
+    [ -n "$enable_scheduler" ] && ENABLE_SCHEDULER="$enable_scheduler"
+    [ -n "$enable_monitoring" ] && ENABLE_MONITORING="$enable_monitoring"
+    [ -n "$scheduler_schedule" ] && SCHEDULER_SCHEDULE="$scheduler_schedule"
+    [ -n "$scheduler_timezone" ] && SCHEDULER_TIMEZONE="$scheduler_timezone"
+    [ -n "$scheduler_endpoint" ] && SCHEDULER_ENDPOINT="$scheduler_endpoint"
+    [ -n "$billing_account_name" ] && BILLING_ACCOUNT_NAME="$billing_account_name"
+    [ -n "$billing_budget_limit_usd" ] && BILLING_BUDGET_LIMIT_USD="$billing_budget_limit_usd"
     [ -n "$github_owner" ] && GITHUB_OWNER="$github_owner"
     [ -n "$github_repo" ] && GITHUB_REPO="$github_repo"
     echo "✓ Configuration loaded"
@@ -200,17 +214,40 @@ ENABLE_VISION_AI=$(prompt_toggle "Vision AI Image Processing" "$ENABLE_VISION_AI
 ENABLE_SPEECH_TO_TEXT=$(prompt_toggle "Speech-to-Text Audio Transcription" "$ENABLE_SPEECH_TO_TEXT")
 ENABLE_TRANSLATION=$(prompt_toggle "Translation API Multi-Language" "$ENABLE_TRANSLATION")
 
+# Phase 4: Cloud Scheduler & Monitoring
+echo ""
+ENABLE_SCHEDULER=$(prompt_toggle "Cloud Scheduler (serverless cron jobs)" "$ENABLE_SCHEDULER")
+
+if [ "$ENABLE_SCHEDULER" == "true" ]; then
+    read -p "👉 Cloud Scheduler cron expression [$SCHEDULER_SCHEDULE]: " INPUT
+    SCHEDULER_SCHEDULE="${INPUT:-$SCHEDULER_SCHEDULE}"
+
+    read -p "👉 Scheduler endpoint path [$SCHEDULER_ENDPOINT]: " INPUT
+    SCHEDULER_ENDPOINT="${INPUT:-$SCHEDULER_ENDPOINT}"
+fi
+
+ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring with Budget Alerts (emergency circuit breaker)" "$ENABLE_MONITORING")
+
+if [ "$ENABLE_MONITORING" == "true" ]; then
+    read -p "👉 Billing account display name [$BILLING_ACCOUNT_NAME]: " INPUT
+    BILLING_ACCOUNT_NAME="${INPUT:-$BILLING_ACCOUNT_NAME}"
+
+    read -p "👉 Monthly budget limit in USD [$BILLING_BUDGET_LIMIT_USD]: " INPUT
+    BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
+fi
+
 # If Cloud Build is enabled, GitHub info is required
 if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
         echo ""
-        echo "❌ Error: Cloud Build enabled but GitHub not configured in .zilch.config"
-        echo ""
-        echo "Add these to .zilch.config:"
-        echo "  github_owner=your-username"
-        echo "  github_repo=your-repo"
-        echo ""
-        exit 1
+        echo "⚙️  Cloud Build requires GitHub repository connection."
+        read -p "👉 Enter your GitHub username/org: " GITHUB_OWNER
+        read -p "👉 Enter your GitHub repository name: " GITHUB_REPO
+
+        if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
+            echo "❌ Error: GitHub credentials are required for Cloud Build."
+            exit 1
+        fi
     fi
 fi
 
@@ -287,10 +324,8 @@ fi
 # 7. Final pre-flight check before Terraform
 echo ""
 echo "🔐 Final verification before Terraform..."
-TERRAFORM_TEST=$(gcloud storage ls "gs://${STATE_BUCKET}/" 2>&1)
-if [ $? -ne 0 ]; then
+if ! gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
     echo "❌ Cannot access state bucket at this moment."
-    echo "Error: $TERRAFORM_TEST"
     echo ""
     echo "This may be:"
     echo "  • Organization policy blocking Cloud Storage access"
@@ -417,7 +452,14 @@ if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
   -var="enable_vision_ai=${ENABLE_VISION_AI}" \
   -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
-  -var="enable_translation=${ENABLE_TRANSLATION}"; then
+  -var="enable_translation=${ENABLE_TRANSLATION}" \
+  -var="enable_scheduler=${ENABLE_SCHEDULER}" \
+  -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
+  -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
+  -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
+  -var="enable_monitoring=${ENABLE_MONITORING}" \
+  -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
+  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}"; then
     echo "❌ Terraform apply failed. Check the error above."
     echo "   Most common: insufficient permissions for required services."
     exit 1
@@ -451,10 +493,9 @@ if [ "$HEALTHY" = false ]; then
 fi
 
 # 8. Update .zilch.config with user's selections (persist for next run)
-if [ -f ".zilch.config" ]; then
-    cat > .zilch.config << CONFIGEOF
+cat > .zilch.config << CONFIGEOF
 # Zilch Reference App Configuration
-# This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 services
+# This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 + Phase 4 services
 # Last updated: $(date)
 
 # GitHub Integration (required for Cloud Build)
@@ -484,9 +525,17 @@ enable_cloud_kms=${ENABLE_CLOUD_KMS}
 enable_vision_ai=${ENABLE_VISION_AI}
 enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}
 enable_translation=${ENABLE_TRANSLATION}
+
+# Phase 4: Cloud Scheduler & Monitoring (optional)
+enable_scheduler=${ENABLE_SCHEDULER}
+scheduler_schedule=${SCHEDULER_SCHEDULE}
+scheduler_timezone=${SCHEDULER_TIMEZONE}
+scheduler_endpoint=${SCHEDULER_ENDPOINT}
+enable_monitoring=${ENABLE_MONITORING}
+billing_account_name=${BILLING_ACCOUNT_NAME}
+billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
 CONFIGEOF
-    echo "✅ Configuration saved to .zilch.config for next run"
-fi
+echo "✅ Configuration saved to .zilch.config for next run"
 
 # 9. Format Summary Diagnostics Output
 echo ""
@@ -511,6 +560,8 @@ if [ "$ENABLE_CLOUD_KMS" == "true" ]; then echo "  ↳ ZILCH_KMS_KEY_ID         
 if [ "$ENABLE_VISION_AI" == "true" ]; then echo "  ↳ ZILCH_VISION_AI_ENABLED  : true"; fi
 if [ "$ENABLE_SPEECH_TO_TEXT" == "true" ]; then echo "  ↳ ZILCH_SPEECH_TO_TEXT_ENABLED: true"; fi
 if [ "$ENABLE_TRANSLATION" == "true" ]; then echo "  ↳ ZILCH_TRANSLATION_ENABLED: true"; fi
+if [ "$ENABLE_SCHEDULER" == "true" ]; then echo "  ↳ ZILCH_SCHEDULER_ENABLED  : ${SCHEDULER_SCHEDULE} (${SCHEDULER_TIMEZONE})"; fi
+if [ "$ENABLE_MONITORING" == "true" ]; then echo "  ↳ ZILCH_MONITORING_ENABLED : ${BILLING_BUDGET_LIMIT_USD} USD/month alert"; fi
 echo ""
 echo "💡 Reminder: Your setup operates completely on Google's Free tier limits."
 echo "   Track parameters safely via: https://cloud.google.com/always-free"

@@ -1,5 +1,5 @@
 output "cloud_run_url" {
-  value       = google_cloud_run_service.app.status[0].url
+  value       = google_cloud_run_v2_service.app.uri
   description = "The public web gateway address link assigned to the running app instance."
 }
 

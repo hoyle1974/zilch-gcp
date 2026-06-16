@@ -115,3 +115,47 @@ variable "enable_translation" {
   default     = false
   description = "Enable Translation API for multi-language support"
 }
+
+# --- PHASE 4: CLOUD SCHEDULER & MONITORING ---
+
+variable "enable_scheduler" {
+  type        = bool
+  default     = false
+  description = "Enable Cloud Scheduler for serverless cron jobs (3 free jobs/month)"
+}
+
+variable "scheduler_schedule" {
+  type        = string
+  default     = "0 0 * * *"
+  description = "Cloud Scheduler cron expression (e.g., '0 0 * * *' for daily at midnight UTC)"
+}
+
+variable "scheduler_timezone" {
+  type        = string
+  default     = "UTC"
+  description = "Timezone for Cloud Scheduler cron execution"
+}
+
+variable "scheduler_endpoint" {
+  type        = string
+  default     = "/api/cron"
+  description = "Cloud Run endpoint path that Cloud Scheduler will POST to"
+}
+
+variable "enable_monitoring" {
+  type        = bool
+  default     = false
+  description = "Enable Cloud Monitoring with budget alerts (emergency circuit breaker)"
+}
+
+variable "billing_account_name" {
+  type        = string
+  default     = "My Billing Account"
+  description = "Display name of the GCP billing account to monitor"
+}
+
+variable "billing_budget_limit_usd" {
+  type        = number
+  default     = 10
+  description = "Monthly billing budget threshold in USD for alert triggers"
+}

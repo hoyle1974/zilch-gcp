@@ -94,76 +94,77 @@ resource "random_id" "bucket_suffix" {
 
 # --- CLOUD RUN CONTAINER BLUEPRINT ORCHESTRATION ---
 
-resource "google_cloud_run_service" "app" {
+resource "google_cloud_run_v2_service" "app" {
   name     = var.app_name
   location = var.gcp_region
 
   template {
-    spec {
-      service_account_name = google_service_account.app.email
-      containers {
-        image = "gcr.io/cloudrun/hello:latest"
+    service_account = google_service_account.app.email
+    # Note: startup_cpu_boost can be enabled via:
+    # gcloud run services update APP_NAME --region=REGION --cpu-boost
 
-        env {
-          name  = "ZILCH_PROJECT_ID"
-          value = var.gcp_project_id
-        }
-        env {
-          name  = "ZILCH_APP_NAME"
-          value = var.app_name
-        }
-        env {
-          name  = "ZILCH_FIRESTORE_DATABASE"
-          value = var.enable_firestore ? "(default)" : ""
-        }
-        env {
-          name  = "ZILCH_SECRET_PREFIX"
-          value = var.enable_secret_manager ? "${var.app_name}-" : ""
-        }
-        env {
-          name  = "ZILCH_STORAGE_BUCKET"
-          value = var.enable_cloud_storage ? "${var.app_name}-storage-${random_id.bucket_suffix.hex}" : ""
-        }
-        env {
-          name  = "ZILCH_VERTEX_AI_ENABLED"
-          value = var.enable_vertex_ai ? "true" : ""
-        }
-        env {
-          name  = "ZILCH_FIREBASE_ENABLED"
-          value = var.enable_firebase_auth ? "true" : ""
-        }
-        env {
-          name  = "ZILCH_PUBSUB_TOPIC"
-          value = var.enable_pubsub ? google_pubsub_topic.app_events[0].name : ""
-        }
-        env {
-          name  = "ZILCH_PUBSUB_SUBSCRIPTION"
-          value = var.enable_pubsub ? google_pubsub_subscription.app_events_sub[0].name : ""
-        }
-        env {
-          name  = "ZILCH_CLOUD_TASKS_QUEUE"
-          value = var.enable_cloud_tasks ? "projects/${var.gcp_project_id}/locations/${var.gcp_region}/queues/${var.app_name}-jobs" : ""
-        }
-        env {
-          name  = "ZILCH_BIGQUERY_DATASET"
-          value = var.enable_bigquery ? google_bigquery_dataset.app_analytics[0].dataset_id : ""
-        }
-        env {
-          name  = "ZILCH_KMS_KEY_ID"
-          value = var.enable_cloud_kms ? google_kms_crypto_key.app_key[0].id : ""
-        }
-        env {
-          name  = "ZILCH_VISION_AI_ENABLED"
-          value = var.enable_vision_ai ? "true" : ""
-        }
-        env {
-          name  = "ZILCH_SPEECH_TO_TEXT_ENABLED"
-          value = var.enable_speech_to_text ? "true" : ""
-        }
-        env {
-          name  = "ZILCH_TRANSLATION_ENABLED"
-          value = var.enable_translation ? "true" : ""
-        }
+    containers {
+      image = "gcr.io/cloudrun/hello:latest"
+
+      env {
+        name  = "ZILCH_PROJECT_ID"
+        value = var.gcp_project_id
+      }
+      env {
+        name  = "ZILCH_APP_NAME"
+        value = var.app_name
+      }
+      env {
+        name  = "ZILCH_FIRESTORE_DATABASE"
+        value = var.enable_firestore ? "(default)" : ""
+      }
+      env {
+        name  = "ZILCH_SECRET_PREFIX"
+        value = var.enable_secret_manager ? "${var.app_name}-" : ""
+      }
+      env {
+        name  = "ZILCH_STORAGE_BUCKET"
+        value = var.enable_cloud_storage ? "${var.app_name}-storage-${random_id.bucket_suffix.hex}" : ""
+      }
+      env {
+        name  = "ZILCH_VERTEX_AI_ENABLED"
+        value = var.enable_vertex_ai ? "true" : ""
+      }
+      env {
+        name  = "ZILCH_FIREBASE_ENABLED"
+        value = var.enable_firebase_auth ? "true" : ""
+      }
+      env {
+        name  = "ZILCH_PUBSUB_TOPIC"
+        value = var.enable_pubsub ? google_pubsub_topic.app_events[0].name : ""
+      }
+      env {
+        name  = "ZILCH_PUBSUB_SUBSCRIPTION"
+        value = var.enable_pubsub ? google_pubsub_subscription.app_events_sub[0].name : ""
+      }
+      env {
+        name  = "ZILCH_CLOUD_TASKS_QUEUE"
+        value = var.enable_cloud_tasks ? "projects/${var.gcp_project_id}/locations/${var.gcp_region}/queues/${var.app_name}-jobs" : ""
+      }
+      env {
+        name  = "ZILCH_BIGQUERY_DATASET"
+        value = var.enable_bigquery ? google_bigquery_dataset.app_analytics[0].dataset_id : ""
+      }
+      env {
+        name  = "ZILCH_KMS_KEY_ID"
+        value = var.enable_cloud_kms ? google_kms_crypto_key.app_key[0].id : ""
+      }
+      env {
+        name  = "ZILCH_VISION_AI_ENABLED"
+        value = var.enable_vision_ai ? "true" : ""
+      }
+      env {
+        name  = "ZILCH_SPEECH_TO_TEXT_ENABLED"
+        value = var.enable_speech_to_text ? "true" : ""
+      }
+      env {
+        name  = "ZILCH_TRANSLATION_ENABLED"
+        value = var.enable_translation ? "true" : ""
       }
     }
   }
@@ -171,7 +172,7 @@ resource "google_cloud_run_service" "app" {
   # Prevents Terraform from overwriting Cloud Build deployments
   lifecycle {
     ignore_changes = [
-      template[0].spec[0].containers[0].image
+      template[0].containers[0].image
     ]
   }
 
@@ -179,8 +180,8 @@ resource "google_cloud_run_service" "app" {
 }
 
 resource "google_cloud_run_service_iam_member" "public" {
-  service  = google_cloud_run_service.app.name
-  location = google_cloud_run_service.app.location
+  service  = google_cloud_run_v2_service.app.name
+  location = google_cloud_run_v2_service.app.location
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -201,7 +202,7 @@ resource "google_artifact_registry_repository" "app_images" {
     action = "DELETE"
     condition {
       tag_state  = "UNTAGGED"
-      older_than = "0s" # Delete ALL old builds immediately
+      older_than = "86400s" # Delete images older than 1 day to prevent transient retrieval errors during rollouts
     }
   }
 
@@ -390,7 +391,7 @@ resource "google_bigquery_dataset" "app_analytics" {
   dataset_id                  = "${replace(var.app_name, "-", "_")}_analytics"
   friendly_name               = "${var.app_name} Analytics"
   description                 = "Analytics dataset for ${var.app_name}"
-  location                    = var.gcp_region == "us-central1" ? "US" : var.gcp_region == "us-east1" ? "US" : "US"
+  location                    = var.gcp_region
   default_table_expiration_ms = 7776000000 # 90 days (free tier quota management)
   project                     = var.gcp_project_id
 
@@ -572,9 +573,12 @@ resource "google_project_service" "firebase" {
   disable_on_destroy = false
 }
 
-# Note: firebaseauth.googleapis.com may require additional org-level permissions
-# If Firebase Auth fails to enable, manually enable it via:
-# gcloud services enable firebaseauth.googleapis.com --project=PROJECT_ID
+# Enable Identity Toolkit API (required for complete Firebase Auth setup)
+resource "google_project_service" "identity_toolkit" {
+  count              = var.enable_firebase_auth ? 1 : 0
+  service            = "identitytoolkit.googleapis.com"
+  disable_on_destroy = false
+}
 
 resource "google_project_iam_member" "firebase" {
   count      = var.enable_firebase_auth ? 1 : 0
