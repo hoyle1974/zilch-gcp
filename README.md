@@ -78,7 +78,7 @@ This builds and deploys your application. For automatic deployments on git push,
 zilch-gcp/
 ├── deploy.sh                            # Interactive setup + GitHub integration script
 ├── tutorial.md                          # Cloud Shell interactive walkthrough
-├── main.tf                              # Terraform: all Phase 1-3 infrastructure
+├── main.tf                              # Terraform: Cloud Run and core services
 ├── variables.tf                         # Terraform: input variables with validation
 ├── outputs.tf                           # Terraform: resource outputs (URLs, IDs)
 ├── backend.tf                           # Terraform: remote state in Cloud Storage
@@ -88,13 +88,13 @@ zilch-gcp/
 ├── .gitignore                           # Git ignore rules
 ├── README.md                            # This file
 └── docs/
-    ├── PHASE_2_TEMPLATE.md              # Guide for extending with new services
+    ├── EXTENSION_GUIDE.md               # Guide for adding new services
     └── superpowers/
         ├── specs/
-        │   ├── 2026-06-13-zilch-mvp-design.md      # Phase 1 architecture
-        │   └── 2026-06-14-zilch-phase-2-design.md  # Phase 2 CI/CD design
+        │   ├── 2026-06-13-zilch-mvp-design.md      # Architecture design
+        │   └── 2026-06-14-zilch-cicd-design.md     # CI/CD and automation
         └── plans/
-            └── 2026-06-15-zilch-phase-3-plan.md    # Phase 3 roadmap
+            └── 2026-06-15-zilch-services-plan.md   # Service integration roadmap
 ```
 
 ## Deploying Your Application
@@ -107,7 +107,7 @@ gcloud run deploy YOUR_APP_NAME --source .
 
 Builds and deploys your application from the current directory or a GitHub repository.
 
-### Automatic Deployment (Phase 2)
+### Automatic Deployment
 
 If you enabled Cloud Build during `./deploy.sh`, every push to your GitHub repository's `main` branch automatically triggers a build and deployment. No manual steps required.
 
@@ -188,15 +188,15 @@ The wiki is organized into sections:
 - **[Topics & Guides](docs/wiki/topics/)** — How-to guides: First Deployment, Troubleshooting, Viewing Logs, Operations
 - **[Architecture & Design](docs/superpowers/specs/)** — Deep dives into design decisions
 
-## Implementation Status
+## Capabilities
 
-**Phase 1:** Core Cloud Run + Firestore, Secrets, Storage, Firebase Auth, Vertex AI — ✅ Complete
+Zilch provides a comprehensive serverless platform with:
 
-**Phase 2:** Cloud Build + Artifact Registry (automatic container builds from GitHub) — ✅ Complete
+- **Core Services:** Cloud Run, Firestore, Cloud Storage, Secret Manager, Firebase Authentication, Vertex AI
+- **CI/CD:** Cloud Build + Artifact Registry for automatic container builds and deployments from GitHub
+- **Extended Services:** Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation
 
-**Phase 3:** Extended services (Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation) — ✅ All toggles implemented, integration guide in progress
-
-All Phase 3 services support feature flags via `variables.tf`. See `docs/superpowers/specs/` for architecture details and `docs/superpowers/plans/` for roadmap.
+All optional services support feature flags via `variables.tf`, allowing you to enable only what you need. See `docs/superpowers/specs/` for architecture details and `docs/superpowers/plans/` for service integration guides.
 
 ## Cost & Quotas
 
@@ -207,11 +207,11 @@ https://console.cloud.google.com/billing/reports
 ## Architecture & Design Details
 
 See [`docs/superpowers/specs/`](docs/superpowers/specs/) for:
-- Phase 1 architecture and design decisions
-- Phase 2 CI/CD setup
-- Phase 3 service integration patterns
+- Architecture and design decisions
+- CI/CD setup and automation
+- Service integration patterns
 
-See [`docs/superpowers/plans/`](docs/superpowers/plans/) for the implementation roadmap.
+See [`docs/superpowers/plans/`](docs/superpowers/plans/) for implementation guides and service integration roadmaps.
 
 ## Reference Application
 
@@ -220,7 +220,7 @@ Clone [`zilch-reference-app`](https://github.com/hoyle1974/zilch-reference-app) 
 ## Contributing
 
 - Found a bug? [Create an issue](https://github.com/hoyle1974/zilch-gcp/issues)
-- Want to add a service? [See the extension guide](docs/PHASE_2_TEMPLATE.md)
+- Want to add a service? [See the extension guide](docs/EXTENSION_GUIDE.md)
 - Have feedback? [Open a discussion](https://github.com/hoyle1974/zilch-gcp/discussions)
 
 ## Support

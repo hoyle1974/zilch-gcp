@@ -1,4 +1,4 @@
-# --- PHASE 4: CLOUD SCHEDULER (Serverless CRON Jobs) ---
+# --- CLOUD SCHEDULER ---
 
 # Enable Cloud Scheduler API
 resource "google_project_service" "scheduler" {

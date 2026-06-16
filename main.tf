@@ -99,8 +99,9 @@ resource "google_cloud_run_v2_service" "app" {
   location = var.gcp_region
 
   template {
-    service_account  = google_service_account.app.email
-    startup_cpu_boost = true
+    service_account = google_service_account.app.email
+    # Note: To enable startup CPU boost for faster health checks on lightweight apps:
+    # gcloud run services update APP_NAME --region=REGION --cpu-boost
 
     containers {
       image = "gcr.io/cloudrun/hello:latest"
@@ -186,7 +187,7 @@ resource "google_cloud_run_service_iam_member" "public" {
   member   = "allUsers"
 }
 
-# --- PHASE 2: ARTIFACT REGISTRY + CLOUD BUILD ---
+# --- ARTIFACT REGISTRY + CLOUD BUILD ---
 
 # Cloud Build storage bucket for build logs (auto-created by GCP, but we manage lifecycle here)
 resource "google_storage_bucket" "cloud_build_logs" {
@@ -213,7 +214,7 @@ resource "google_artifact_registry_repository" "app_images" {
   location      = var.gcp_region
   repository_id = "${var.app_name}-images"
   format        = "DOCKER"
-  description   = "Container images for ${var.app_name} (Phase 2 Cloud Build)"
+  description   = "Container images for ${var.app_name} (Cloud Build)"
 
   # Cleanup: Keep ONLY current image (rebuild from git if needed)
   cleanup_policies {
@@ -314,7 +315,7 @@ resource "google_cloudbuild_trigger" "app_build" {
   ]
 }
 
-# --- PHASE 3: ADVANCED SERVICES ---
+# --- ADVANCED SERVICES (OPTIONAL) ---
 
 # Enable Pub/Sub API
 resource "google_project_service" "pubsub" {

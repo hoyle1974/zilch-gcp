@@ -1,4 +1,4 @@
-# --- PHASE 4: CLOUD MONITORING & BUDGET ALERTS (Emergency Circuit Breaker) ---
+# --- CLOUD MONITORING & BUDGET ALERTS ---
 
 # Enable Monitoring API
 resource "google_project_service" "monitoring" {

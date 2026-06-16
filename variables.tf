@@ -116,7 +116,7 @@ variable "enable_translation" {
   description = "Enable Translation API for multi-language support"
 }
 
-# --- PHASE 4: CLOUD SCHEDULER & MONITORING ---
+# --- CLOUD SCHEDULER & MONITORING ---
 
 variable "enable_scheduler" {
   type        = bool

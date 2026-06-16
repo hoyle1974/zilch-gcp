@@ -99,7 +99,7 @@ https://cloud.google.com/free/docs/always-free-usage-limits
 
 ---
 
-## Phase 2: Cloud Build + GitOps (Automatic Deployment)
+## Continuous Deployment with Cloud Build
 
 After the initial `./deploy.sh` setup, your app is ready for **continuous deployment**. Every push to your GitHub repository automatically triggers a build and deployment.
 
@@ -180,9 +180,9 @@ That's it—no manual rollback needed. All your code history is in git.
 
 ---
 
-## Phase 3: Advanced Services (Optional)
+## Advanced Services (Optional)
 
-Phase 3 adds specialized services for event-driven architecture, data analytics, encryption, and AI capabilities.
+Zilch includes optional specialized services for event-driven architecture, data analytics, encryption, and AI capabilities. Enable them via feature flags in `variables.tf`.
 
 ### Pub/Sub - Event Streaming
 
@@ -302,7 +302,7 @@ Zilch stays free as long as you stay within these limits:
 
 - **Fork or clone this repo** and customize it for your needs
 - **Read the design spec** in `docs/superpowers/specs/` for architectural details
-- **Explore Phase 2** features (Cloud Build, Artifact Registry) in the contribution guide
+- **Explore CI/CD automation** (Cloud Build, Artifact Registry) in the contribution guide
 - **Join the community** and share your Zilch deployments
 
 Happy building! 🎉
