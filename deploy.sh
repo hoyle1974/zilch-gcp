@@ -251,6 +251,54 @@ if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     fi
 fi
 
+# Early Config Save: Persist user input before Terraform runs
+# This allows easy recovery if Terraform fails - just re-run with same settings
+echo ""
+echo "💾 Saving configuration for quick recovery..."
+cat > .zilch.config << CONFIGEOF
+# Zilch Reference App Configuration
+# This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 + Phase 4 services
+# Last updated: $(date)
+
+# GitHub Integration (required for Cloud Build)
+github_owner=${GITHUB_OWNER}
+github_repo=${GITHUB_REPO}
+
+# GCP Settings
+gcp_project_id=${PROJECT_ID}
+app_name=${APP_NAME}
+gcp_region=${GCP_REGION}
+
+# Phase 1 Optional Features
+enable_firestore=${ENABLE_FIRESTORE}
+enable_secret_manager=${ENABLE_SECRET_MANAGER}
+enable_cloud_storage=${ENABLE_CLOUD_STORAGE}
+enable_firebase_auth=${ENABLE_FIREBASE_AUTH}
+enable_vertex_ai=${ENABLE_VERTEX_AI}
+
+# Phase 2: Cloud Build + GitOps (optional)
+enable_cloud_build=${ENABLE_CLOUD_BUILD}
+
+# Phase 3: Advanced Services (optional)
+enable_pubsub=${ENABLE_PUBSUB}
+enable_cloud_tasks=${ENABLE_CLOUD_TASKS}
+enable_bigquery=${ENABLE_BIGQUERY}
+enable_cloud_kms=${ENABLE_CLOUD_KMS}
+enable_vision_ai=${ENABLE_VISION_AI}
+enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}
+enable_translation=${ENABLE_TRANSLATION}
+
+# Phase 4: Cloud Scheduler & Monitoring (optional)
+enable_scheduler=${ENABLE_SCHEDULER}
+scheduler_schedule="${SCHEDULER_SCHEDULE}"
+scheduler_timezone="${SCHEDULER_TIMEZONE}"
+scheduler_endpoint="${SCHEDULER_ENDPOINT}"
+enable_monitoring=${ENABLE_MONITORING}
+billing_account_name="${BILLING_ACCOUNT_NAME}"
+billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
+CONFIGEOF
+echo "✓ Configuration saved to .zilch.config"
+
 # 6. Automate State Bucket Isolation (The Bootstrap)
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
 echo ""
@@ -492,50 +540,7 @@ if [ "$HEALTHY" = false ]; then
     echo "Review your Cloud Run execution engine console logs to trace unexpected boot failures."
 fi
 
-# 8. Update .zilch.config with user's selections (persist for next run)
-cat > .zilch.config << CONFIGEOF
-# Zilch Reference App Configuration
-# This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 + Phase 4 services
-# Last updated: $(date)
-
-# GitHub Integration (required for Cloud Build)
-github_owner=${GITHUB_OWNER}
-github_repo=${GITHUB_REPO}
-
-# GCP Settings
-gcp_project_id=${PROJECT_ID}
-app_name=${APP_NAME}
-gcp_region=${GCP_REGION}
-
-# Phase 1 Optional Features
-enable_firestore=${ENABLE_FIRESTORE}
-enable_secret_manager=${ENABLE_SECRET_MANAGER}
-enable_cloud_storage=${ENABLE_CLOUD_STORAGE}
-enable_firebase_auth=${ENABLE_FIREBASE_AUTH}
-enable_vertex_ai=${ENABLE_VERTEX_AI}
-
-# Phase 2: Cloud Build + GitOps (optional)
-enable_cloud_build=${ENABLE_CLOUD_BUILD}
-
-# Phase 3: Advanced Services (optional)
-enable_pubsub=${ENABLE_PUBSUB}
-enable_cloud_tasks=${ENABLE_CLOUD_TASKS}
-enable_bigquery=${ENABLE_BIGQUERY}
-enable_cloud_kms=${ENABLE_CLOUD_KMS}
-enable_vision_ai=${ENABLE_VISION_AI}
-enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}
-enable_translation=${ENABLE_TRANSLATION}
-
-# Phase 4: Cloud Scheduler & Monitoring (optional)
-enable_scheduler=${ENABLE_SCHEDULER}
-scheduler_schedule="${SCHEDULER_SCHEDULE}"
-scheduler_timezone="${SCHEDULER_TIMEZONE}"
-scheduler_endpoint="${SCHEDULER_ENDPOINT}"
-enable_monitoring=${ENABLE_MONITORING}
-billing_account_name="${BILLING_ACCOUNT_NAME}"
-billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
-CONFIGEOF
-echo "✅ Configuration saved to .zilch.config for next run"
+# Config already saved early (before Terraform) for quick recovery on failure
 
 # 9. Format Summary Diagnostics Output
 echo ""
