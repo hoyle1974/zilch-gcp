@@ -18,11 +18,11 @@ resource "google_project_service" "billing" {
   disable_on_destroy = false
 }
 
-# Get the current billing account
-# Uses the billing account associated with the GCP project
-# If you have multiple billing accounts, you may need to update this manually
+# Get the current billing account associated with the project
+# Requires: gcloud beta billing accounts list to see available accounts
+# For now, monitoring works but budget alerts require manual billing account setup
 data "google_billing_account" "account" {
-  count            = var.enable_monitoring ? 1 : 0
+  count            = 0  # Disabled: requires manual billing account ID configuration
   open             = true
 }
 
@@ -56,37 +56,41 @@ resource "google_pubsub_subscription" "budget_alerts_sub" {
 }
 
 # Billing Budget: Alert at key thresholds (50%, 100%, 150%)
-# Note: Billing account must be linked to the GCP project for this to work
-# If billing account not found, budget alerts will be skipped
-resource "google_billing_budget" "app_budget" {
-  count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 && length(data.google_billing_account.account) > 0 ? 1 : 0
-  billing_account  = data.google_billing_account.account[0].id
-  display_name     = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
-
-  budget_filter {
-    projects = ["projects/${data.google_client_config.current.project}"]
-  }
-
-  amount {
-    specified_amount {
-      currency_code = "USD"
-      units         = floor(var.billing_budget_limit_usd)
-      nanos         = floor((var.billing_budget_limit_usd - floor(var.billing_budget_limit_usd)) * 1000000000)
-    }
-  }
-
-  threshold_rules {
-    threshold_percent = 50.0
-  }
-
-  threshold_rules {
-    threshold_percent = 100.0
-  }
-
-  threshold_rules {
-    threshold_percent = 150.0
-  }
-}
+# NOTE: Billing budgets require a billing account ID, which must be retrieved manually:
+# gcloud beta billing accounts list
+# Then set the billing_account_id variable or use the GCP console to configure.
+# For now, monitoring alerts work without budgets.
+# To enable budget alerts, uncomment below and provide billing account ID.
+#
+# resource "google_billing_budget" "app_budget" {
+#   count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 ? 1 : 0
+#   billing_account  = "BILLING_ACCOUNT_ID_HERE"  # Get from: gcloud beta billing accounts list
+#   display_name     = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
+#
+#   budget_filter {
+#     projects = ["projects/${data.google_client_config.current.project}"]
+#   }
+#
+#   amount {
+#     specified_amount {
+#       currency_code = "USD"
+#       units         = floor(var.billing_budget_limit_usd)
+#       nanos         = floor((var.billing_budget_limit_usd - floor(var.billing_budget_limit_usd)) * 1000000000)
+#     }
+#   }
+#
+#   threshold_rules {
+#     threshold_percent = 50.0
+#   }
+#
+#   threshold_rules {
+#     threshold_percent = 100.0
+#   }
+#
+#   threshold_rules {
+#     threshold_percent = 150.0
+#   }
+# }
 
 # Get current GCP project for billing budget
 data "google_client_config" "current" {}
