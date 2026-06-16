@@ -106,7 +106,7 @@ resource "google_monitoring_notification_channel" "app_alerts" {
   project         = var.gcp_project_id
 
   labels = {
-    topic = google_pubsub_topic.budget_alerts[0].name
+    topic = google_pubsub_topic.budget_alerts[0].id
   }
 }
 
