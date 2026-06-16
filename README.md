@@ -175,11 +175,18 @@ Double-check your Project ID and ensure you have IAM permissions.
 ### "State bucket already exists"
 This is normal on subsequent runs. Zilch reuses the existing bucket.
 
-## Architecture & Design
+## Documentation & Knowledge Base
 
-For detailed architecture decisions, production guarantees, and design rationale, see:
+Zilch includes a comprehensive wiki with entity pages, topic guides, and troubleshooting resources.
 
-📖 **[Zilch MVP Design Specification](docs/superpowers/specs/2026-06-13-zilch-mvp-design.md)**
+### 📚 [**Start with the Wiki Index**](docs/wiki/INDEX.md)
+
+The wiki is organized into sections:
+
+- **[Core Concepts](docs/wiki/entities/)** — Cloud Run, Always Free Tier, Terraform, Service Accounts, Environment Variables, etc.
+- **[Services Directory](docs/wiki/entities/services/)** — Reference for each enabled service (Firestore, Storage, Pub/Sub, BigQuery, Cloud Scheduler, etc.)
+- **[Topics & Guides](docs/wiki/topics/)** — How-to guides: First Deployment, Troubleshooting, Viewing Logs, Operations
+- **[Architecture & Design](docs/superpowers/specs/)** — Deep dives into design decisions
 
 ## Implementation Status
 

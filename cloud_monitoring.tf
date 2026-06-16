@@ -18,12 +18,12 @@ resource "google_project_service" "billing" {
   disable_on_destroy = false
 }
 
-# Get the current billing account (requires authenticated context)
-# This is informational for the monitoring setup
+# Get the current billing account
+# Uses the billing account associated with the GCP project
+# If you have multiple billing accounts, you may need to update this manually
 data "google_billing_account" "account" {
   count            = var.enable_monitoring ? 1 : 0
-  display_name     = var.billing_account_name
-  open              = true
+  open             = true
 }
 
 # --- BUDGET ALERT WITH PUBSUB NOTIFICATION ---
@@ -56,8 +56,10 @@ resource "google_pubsub_subscription" "budget_alerts_sub" {
 }
 
 # Billing Budget: Alert at key thresholds (50%, 100%, 150%)
+# Note: Billing account must be linked to the GCP project for this to work
+# If billing account not found, budget alerts will be skipped
 resource "google_billing_budget" "app_budget" {
-  count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 ? 1 : 0
+  count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 && length(data.google_billing_account.account) > 0 ? 1 : 0
   billing_account  = data.google_billing_account.account[0].id
   display_name     = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
 
