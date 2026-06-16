@@ -106,11 +106,7 @@ resource "google_monitoring_notification_channel" "app_alerts" {
   project         = var.gcp_project_id
 
   labels = {
-    channel_name = "budget-alerts"
-  }
-
-  user_labels = {
-    severity = "critical"
+    topic = google_pubsub_topic.budget_alerts[0].name
   }
 }
 
