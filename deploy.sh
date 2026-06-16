@@ -528,11 +528,11 @@ enable_translation=${ENABLE_TRANSLATION}
 
 # Phase 4: Cloud Scheduler & Monitoring (optional)
 enable_scheduler=${ENABLE_SCHEDULER}
-scheduler_schedule=${SCHEDULER_SCHEDULE}
-scheduler_timezone=${SCHEDULER_TIMEZONE}
-scheduler_endpoint=${SCHEDULER_ENDPOINT}
+scheduler_schedule="${SCHEDULER_SCHEDULE}"
+scheduler_timezone="${SCHEDULER_TIMEZONE}"
+scheduler_endpoint="${SCHEDULER_ENDPOINT}"
 enable_monitoring=${ENABLE_MONITORING}
-billing_account_name=${BILLING_ACCOUNT_NAME}
+billing_account_name="${BILLING_ACCOUNT_NAME}"
 billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
 CONFIGEOF
 echo "✅ Configuration saved to .zilch.config for next run"
