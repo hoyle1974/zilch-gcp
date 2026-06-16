@@ -69,7 +69,7 @@ app_name=my-app                  # Application name (required)
 gcp_region=us-central1           # Always Free region only
 ```
 
-### Phase 1: Core Services
+### Core Services
 ```bash
 enable_firestore=true            # Firestore NoSQL Database
 enable_secret_manager=true       # Secret Manager
@@ -78,14 +78,14 @@ enable_firebase_auth=true        # Firebase Authentication
 enable_vertex_ai=true            # Vertex AI / Gemini
 ```
 
-### Phase 2: CI/CD
+### CI/CD & Automation
 ```bash
 enable_cloud_build=true          # Cloud Build (recommended)
 github_owner=myusername          # GitHub username/org (if Cloud Build enabled)
 github_repo=myrepo               # GitHub repository name (if Cloud Build enabled)
 ```
 
-### Phase 3: Advanced Services
+### Advanced Services (Optional)
 ```bash
 enable_pubsub=true               # Pub/Sub Event Streaming
 enable_cloud_tasks=true          # Cloud Tasks Job Queues
@@ -96,7 +96,7 @@ enable_speech_to_text=true       # Speech-to-Text
 enable_translation=true          # Translation API
 ```
 
-### Phase 4: Scheduler & Monitoring
+### Scheduling & Monitoring (Optional)
 ```bash
 enable_scheduler=true            # Cloud Scheduler cron jobs
 scheduler_schedule="0 0 * * *"   # Cron expression (daily at midnight)

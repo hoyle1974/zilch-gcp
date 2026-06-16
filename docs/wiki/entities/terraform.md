@@ -20,8 +20,8 @@ main.tf                  # Core Cloud Run + service definitions
 variables.tf             # Input variables (what users can customize)
 outputs.tf               # Output values (URLs, IDs, etc.)
 backend.tf               # Remote state storage configuration
-cloud_scheduler.tf       # Cloud Scheduler (Phase 4)
-cloud_monitoring.tf      # Cloud Monitoring (Phase 4)
+cloud_scheduler.tf       # Cloud Scheduler
+cloud_monitoring.tf      # Cloud Monitoring
 .terraform/              # Terraform modules cache (auto-generated)
 .terraform.lock.hcl      # Dependency versions (for consistency)
 terraform.tfvars         # Variable values (created by deploy.sh)

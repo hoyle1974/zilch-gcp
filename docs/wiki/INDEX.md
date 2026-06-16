@@ -37,28 +37,32 @@ Welcome to the Zilch knowledge base. This is a structured, interlinked reference
 
 ## Services Directory
 
-### Phase 1: Core Data & Authentication
+### Data & Storage
 - **[Firestore](entities/services/firestore.md)** — NoSQL document database
-- **[Secret Manager](entities/services/secret-manager.md)** — Secure credential storage
 - **[Cloud Storage](entities/services/cloud-storage.md)** — Object storage for files
-- **[Firebase Auth](entities/services/firebase-auth.md)** — Social login and authentication
-- **[Vertex AI](entities/services/vertex-ai.md)** — AI/ML API access (Gemini)
-
-### Phase 2: CI/CD & DevOps
-- **[Cloud Build](entities/services/cloud-build.md)** — Automated builds from GitHub
-- **[Artifact Registry](entities/services/artifact-registry.md)** — Container image registry
-
-### Phase 3: Advanced Services
-- **[Pub/Sub](entities/services/pubsub.md)** — Event streaming and messaging
-- **[Cloud Tasks](entities/services/cloud-tasks.md)** — Async job queues
 - **[BigQuery](entities/services/bigquery.md)** — Analytics and data warehousing
+
+### Authentication & Security
+- **[Firebase Auth](entities/services/firebase-auth.md)** — Social login and authentication
+- **[Secret Manager](entities/services/secret-manager.md)** — Secure credential storage
 - **[Cloud KMS](entities/services/cloud-kms.md)** — Encryption key management
+
+### AI & Machine Learning
+- **[Vertex AI](entities/services/vertex-ai.md)** — AI/ML API access (Gemini)
 - **[Vision AI](entities/services/vision-ai.md)** — Image analysis and processing
 - **[Speech-to-Text](entities/services/speech-to-text.md)** — Audio transcription
 - **[Translation API](entities/services/translation.md)** — Multi-language support
 
-### Phase 4: Monitoring & Automation
+### CI/CD & Automation
+- **[Cloud Build](entities/services/cloud-build.md)** — Automated builds from GitHub
+- **[Artifact Registry](entities/services/artifact-registry.md)** — Container image registry
 - **[Cloud Scheduler](entities/services/cloud-scheduler.md)** — Serverless cron jobs
+
+### Messaging & Events
+- **[Pub/Sub](entities/services/pubsub.md)** — Event streaming and messaging
+- **[Cloud Tasks](entities/services/cloud-tasks.md)** — Async job queues
+
+### Monitoring & Operations
 - **[Cloud Monitoring](entities/services/cloud-monitoring.md)** — Alerts and budget tracking
 
 ---
