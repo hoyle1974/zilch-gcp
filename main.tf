@@ -189,6 +189,25 @@ resource "google_cloud_run_service_iam_member" "public" {
 
 # --- PHASE 2: ARTIFACT REGISTRY + CLOUD BUILD ---
 
+# Cloud Build storage bucket for build logs (auto-created by GCP, but we manage lifecycle here)
+resource "google_storage_bucket" "cloud_build_logs" {
+  count         = var.enable_cloud_build ? 1 : 0
+  project       = var.gcp_project_id
+  name          = "${var.gcp_project_id}_cloudbuild"
+  location      = var.gcp_region
+  force_destroy = false
+
+  # Cleanup: Delete old Cloud Build logs after 30 days (prevents unbounded storage costs)
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
 # Artifact Registry for container images
 resource "google_artifact_registry_repository" "app_images" {
   count         = var.enable_cloud_build ? 1 : 0
