@@ -247,6 +247,26 @@ prompt_toggle() {
     fi
 }
 
+confirm_gcp_action() {
+    local action=$1
+    local default_response="y"
+
+    if [ "$AUTO_MODE" = true ]; then
+        # In auto mode, proceed without asking
+        return 0
+    fi
+
+    read -p "${CYAN}${action}${NC} ${BLUE}[Y/n]${NC}: " choice
+    choice="${choice:-$default_response}"
+
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+        return 0
+    else
+        echo -e "${YELLOW}⚠${NC} Skipped. Cannot continue without this step."
+        exit 1
+    fi
+}
+
 echo ""
 echo -e "${BOLD}Services${NC}"
 ENABLE_FIRESTORE=$(prompt_toggle "Firestore" "$ENABLE_FIRESTORE")
@@ -521,27 +541,30 @@ fi
 echo -e "${GREEN}✓${NC} Init complete"
 
 if [ "$ENABLE_MONITORING" = "true" ] && [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
-    echo -e "${BLUE}→${NC} Enabling billing budget API"
+    confirm_gcp_action "Enable billingbudgets API on ${CYAN}${PROJECT_ID}${NC}?"
     if ! gcloud services enable billingbudgets.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
         echo -e "${RED}✗ Could not enable billingbudgets.googleapis.com API${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✓${NC} Billing API enabled"
 fi
 
 if [ "$ENABLE_SCHEDULER" = "true" ]; then
-    echo -e "${BLUE}→${NC} Enabling Cloud Scheduler API"
+    confirm_gcp_action "Enable Cloud Scheduler API on ${CYAN}${PROJECT_ID}${NC}?"
     if ! gcloud services enable cloudscheduler.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
         echo -e "${RED}✗ Could not enable cloudscheduler.googleapis.com API${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✓${NC} Cloud Scheduler API enabled"
 fi
 
 if [ "$ENABLE_FIRESTORE" = "true" ]; then
-    echo -e "${BLUE}→${NC} Enabling Firestore API"
+    confirm_gcp_action "Enable Firestore API on ${CYAN}${PROJECT_ID}${NC}?"
     if ! gcloud services enable firestore.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
         echo -e "${RED}✗ Could not enable firestore.googleapis.com API${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✓${NC} Firestore API enabled"
 fi
 
 echo -e "${BLUE}→${NC} Applying infrastructure"
