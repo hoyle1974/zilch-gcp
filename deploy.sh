@@ -202,10 +202,16 @@ prompt_toggle() {
     local feature_name=$1
     local current_value=$2
     local default_response="n"
+    local status_display=""
+
     if [ "$current_value" = "true" ]; then
         default_response="y"
+        status_display=" ${GREEN}[enabled]${NC}"
+    else
+        status_display=" ${CYAN}[disabled]${NC}"
     fi
-    read -p "${BLUE}  ${feature_name}?${NC} ${CYAN}[y/n]${NC} " choice
+
+    read -p "${BLUE}  ${feature_name}?${NC}${status_display} ${CYAN}[y/n]${NC} " choice
     choice="${choice:-$default_response}"
     if [[ "$choice" =~ ^[Yy]$ ]]; then
         echo "true"
