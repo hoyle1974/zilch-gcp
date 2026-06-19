@@ -286,7 +286,7 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         # Interactive menu for billing account selection
         declare -a BILLING_IDS
         declare -a BILLING_NAMES
-        local index=1
+        index=1
 
         while IFS=',' read -r account_id display_name; do
             # Clean up quotes from CSV
