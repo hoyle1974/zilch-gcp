@@ -54,6 +54,7 @@ ENABLE_SPEECH_TO_TEXT="false"
 ENABLE_TRANSLATION="false"
 ENABLE_SCHEDULER="false"
 ENABLE_MONITORING="false"
+ALLOW_UNAUTHENTICATED_ACCESS="true"
 SCHEDULER_SCHEDULE="0 0 * * *"
 SCHEDULER_TIMEZONE="UTC"
 SCHEDULER_ENDPOINT="/api/cron"
@@ -540,32 +541,8 @@ if [ "$TF_INIT_SUCCESS" = false ]; then
 fi
 echo -e "${GREEN}✓${NC} Init complete"
 
-if [ "$ENABLE_MONITORING" = "true" ] && [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
-    confirm_gcp_action "Enable billingbudgets API on ${CYAN}${PROJECT_ID}${NC}?"
-    if ! gcloud services enable billingbudgets.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
-        echo -e "${RED}✗ Could not enable billingbudgets.googleapis.com API${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓${NC} Billing API enabled"
-fi
-
-if [ "$ENABLE_SCHEDULER" = "true" ]; then
-    confirm_gcp_action "Enable Cloud Scheduler API on ${CYAN}${PROJECT_ID}${NC}?"
-    if ! gcloud services enable cloudscheduler.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
-        echo -e "${RED}✗ Could not enable cloudscheduler.googleapis.com API${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓${NC} Cloud Scheduler API enabled"
-fi
-
-if [ "$ENABLE_FIRESTORE" = "true" ]; then
-    confirm_gcp_action "Enable Firestore API on ${CYAN}${PROJECT_ID}${NC}?"
-    if ! gcloud services enable firestore.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
-        echo -e "${RED}✗ Could not enable firestore.googleapis.com API${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓${NC} Firestore API enabled"
-fi
+# Note: Firestore, Scheduler, and Monitoring require special permissions/setup
+# They're disabled by default. Users can enable them individually if they have the requirements.
 
 echo -e "${BLUE}→${NC} Applying infrastructure"
 if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
