@@ -170,16 +170,26 @@ fi
 
 echo ""
 echo -e "${BOLD}Region${NC}"
-echo "  [1] us-central1 (Iowa - Preferred Default)"
-echo "  [2] us-east1    (South Carolina)"
-echo "  [3] us-west1    (Oregon)"
 
 # Show current region as default
 REGION_DEFAULT="1"
-[ "$GCP_REGION" = "us-east1" ] && REGION_DEFAULT="2"
-[ "$GCP_REGION" = "us-west1" ] && REGION_DEFAULT="3"
+if [ "$GCP_REGION" = "us-east1" ]; then
+    REGION_DEFAULT="2"
+    echo "  [1] us-central1 (Iowa)"
+    echo -e "  ${CYAN}[2] us-east1    (South Carolina) ← current${NC}"
+    echo "  [3] us-west1    (Oregon)"
+elif [ "$GCP_REGION" = "us-west1" ]; then
+    REGION_DEFAULT="3"
+    echo "  [1] us-central1 (Iowa)"
+    echo "  [2] us-east1    (South Carolina)"
+    echo -e "  ${CYAN}[3] us-west1    (Oregon) ← current${NC}"
+else
+    echo -e "  ${CYAN}[1] us-central1 (Iowa) ← current${NC}"
+    echo "  [2] us-east1    (South Carolina)"
+    echo "  [3] us-west1    (Oregon)"
+fi
 
-read -p "${BLUE}Select${NC} ${CYAN}[1-3]${NC}: " REGION_CHOICE
+read -p "${BLUE}Select${NC} ${CYAN}[1-3, default: ${REGION_DEFAULT}]${NC}: " REGION_CHOICE
 REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
 
 case "$REGION_CHOICE" in
