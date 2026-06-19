@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **Transparency Note:** This project was created with the help of LLMs (Claude and Gemini). We believe in being upfront about this — if you have concerns about using AI-assisted tools, we want you to know before deciding whether to use Zilch.
+
 Zilch helps solo developers, indie hackers, and non-backend engineers deploy production-grade serverless applications on Google Cloud Platform without touching the web console. Deploy a working app in 2-3 minutes from Cloud Shell.
 
 ## What is Zilch?
