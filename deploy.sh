@@ -160,6 +160,24 @@ if [ -z "$ROLE_CHECK" ]; then
     exit 1
 fi
 echo "✓ IAM permissions verified"
+
+# Additional check: If Firestore is enabled, verify user has Firestore Admin role
+if [ "$ENABLE_FIRESTORE" = "true" ]; then
+    FIRESTORE_ROLE=$(gcloud projects get-iam-policy "$PROJECT_ID" \
+      --flatten="bindings[].members" \
+      --filter="bindings.members:user:${CURRENT_USER} AND bindings.role:roles/datastore.admin" \
+      --format="value(bindings.role)" 2>/dev/null | head -1)
+
+    if [ -z "$FIRESTORE_ROLE" ]; then
+        echo "⚠️  Warning: ${CURRENT_USER} may not have Firestore Admin role for location management."
+        echo "   If Firestore creation fails, ask your project admin to grant:"
+        echo ""
+        echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} \\"
+        echo "    --member=user:${CURRENT_USER} \\"
+        echo "    --role=roles/datastore.admin"
+        echo ""
+    fi
+fi
 echo ""
 echo "✅ All prerequisites met. Ready to deploy."
 echo ""
