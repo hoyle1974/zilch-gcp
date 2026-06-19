@@ -256,20 +256,37 @@ ALLOW_UNAUTHENTICATED_ACCESS=$(prompt_toggle "Allow unauthenticated access to Cl
 ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring with Budget Alerts (emergency circuit breaker)" "$ENABLE_MONITORING")
 
 if [ "$ENABLE_MONITORING" == "true" ]; then
-    read -p "👉 Billing account display name [$BILLING_ACCOUNT_NAME]: " INPUT
-    BILLING_ACCOUNT_NAME="${INPUT:-$BILLING_ACCOUNT_NAME}"
-
     read -p "👉 Monthly budget limit in USD [$BILLING_BUDGET_LIMIT_USD]: " INPUT
     BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
 
     echo ""
-    echo "📋 Available GCP Billing Accounts:"
-    BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="table(name,displayName)" 2>&1)
+    echo "📋 GCP Billing Accounts:"
+    BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName)" 2>&1)
     BILLING_LIST_EXIT=$?
 
-    if [ $BILLING_LIST_EXIT -eq 0 ] && [ -n "$(echo "$BILLING_LIST_OUTPUT" | tail -n +2)" ]; then
-        echo "$BILLING_LIST_OUTPUT"
+    if [ $BILLING_LIST_EXIT -eq 0 ] && [ -n "$BILLING_LIST_OUTPUT" ]; then
+        # Interactive menu for billing account selection
+        declare -a BILLING_IDS
+        declare -a BILLING_NAMES
+        local index=1
+
+        while IFS=',' read -r account_id display_name; do
+            # Clean up quotes from CSV
+            account_id=$(echo "$account_id" | sed 's/"//g')
+            display_name=$(echo "$display_name" | sed 's/"//g')
+
+            BILLING_IDS[$index]="$account_id"
+            BILLING_NAMES[$index]="$display_name"
+            printf "  [%d] %s (%s)\n" "$index" "$display_name" "$account_id"
+            index=$((index + 1))
+        done <<< "$BILLING_LIST_OUTPUT"
+
         echo ""
+        read -p "👉 Select billing account [1-$((index - 1)), or leave blank to skip]: " CHOICE
+        if [ -n "$CHOICE" ] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -lt "$index" ]; then
+            GCP_BILLING_ACCOUNT_ID="${BILLING_IDS[$CHOICE]}"
+            BILLING_ACCOUNT_NAME="${BILLING_NAMES[$CHOICE]}"
+        fi
     else
         echo "⚠️  Could not list billing accounts (requires organization-level 'Billing Account User' role)."
         echo ""
@@ -286,9 +303,9 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         echo ""
         echo "  Option 3: Ask your Billing Account Admin to provide the ID"
         echo ""
+        read -p "👉 Enter GCP Billing Account ID (or leave blank to skip): " INPUT
+        GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
     fi
-    read -p "👉 Enter GCP Billing Account ID (or leave blank to skip): " INPUT
-    GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
 fi
 
 # If Cloud Build is enabled, GitHub info is required
