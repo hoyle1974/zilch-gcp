@@ -301,8 +301,8 @@ Zilch stays free as long as you stay within these limits:
 ## 7. What's Next?
 
 - **Fork or clone this repo** and customize it for your needs
-- **Read the design spec** in `docs/superpowers/specs/` for architectural details
-- **Explore CI/CD automation** (Cloud Build, Artifact Registry) in the contribution guide
+- **Read the wiki** in `docs/wiki/` for architectural details and guides
+- **Explore CI/CD automation** (Cloud Build, Artifact Registry) in the wiki development section
 - **Join the community** and share your Zilch deployments
 
 Happy building! 🎉

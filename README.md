@@ -88,13 +88,10 @@ zilch-gcp/
 ├── .gitignore                           # Git ignore rules
 ├── README.md                            # This file
 └── docs/
-    ├── EXTENSION_GUIDE.md               # Guide for adding new services
-    └── superpowers/
-        ├── specs/
-        │   ├── 2026-06-13-zilch-mvp-design.md      # Architecture design
-        │   └── 2026-06-14-zilch-cicd-design.md     # CI/CD and automation
-        └── plans/
-            └── 2026-06-15-zilch-services-plan.md   # Service integration roadmap
+    └── wiki/                            # Structured knowledge base
+        ├── INDEX.md                     # Wiki home and navigation
+        ├── entities/                    # Core concept pages
+        └── topics/                      # Topic-specific guides
 ```
 
 ## Deploying Your Application
@@ -186,7 +183,6 @@ The wiki is organized into sections:
 - **[Core Concepts](docs/wiki/entities/)** — Cloud Run, Always Free Tier, Terraform, Service Accounts, Environment Variables, etc.
 - **[Services Directory](docs/wiki/entities/services/)** — Reference for each enabled service (Firestore, Storage, Pub/Sub, BigQuery, Cloud Scheduler, etc.)
 - **[Topics & Guides](docs/wiki/topics/)** — How-to guides: First Deployment, Troubleshooting, Viewing Logs, Operations
-- **[Architecture & Design](docs/superpowers/specs/)** — Deep dives into design decisions
 
 ## Capabilities
 
@@ -196,7 +192,7 @@ Zilch provides a comprehensive serverless platform with:
 - **CI/CD:** Cloud Build + Artifact Registry for automatic container builds and deployments from GitHub
 - **Extended Services:** Pub/Sub, Cloud Tasks, BigQuery, Cloud KMS, Vision AI, Speech-to-Text, Translation
 
-All optional services support feature flags via `variables.tf`, allowing you to enable only what you need. See `docs/superpowers/specs/` for architecture details and `docs/superpowers/plans/` for service integration guides.
+All optional services support feature flags via `variables.tf`, allowing you to enable only what you need. See the [wiki](docs/wiki/INDEX.md) for detailed service documentation.
 
 ## Cost & Quotas
 
@@ -206,12 +202,11 @@ https://console.cloud.google.com/billing/reports
 
 ## Architecture & Design Details
 
-See [`docs/superpowers/specs/`](docs/superpowers/specs/) for:
+See the [wiki](docs/wiki/INDEX.md) for:
 - Architecture and design decisions
 - CI/CD setup and automation
 - Service integration patterns
-
-See [`docs/superpowers/plans/`](docs/superpowers/plans/) for implementation guides and service integration roadmaps.
+- Implementation guides and service integration roadmaps
 
 ## Reference Application
 
@@ -220,7 +215,7 @@ Clone [`zilch-reference-app`](https://github.com/hoyle1974/zilch-reference-app) 
 ## Contributing
 
 - Found a bug? [Create an issue](https://github.com/hoyle1974/zilch-gcp/issues)
-- Want to add a service? [See the extension guide](docs/EXTENSION_GUIDE.md)
+- Want to add a service? [See the wiki development guide](docs/wiki/topics/development/extending-zilch.md)
 - Have feedback? [Open a discussion](https://github.com/hoyle1974/zilch-gcp/discussions)
 
 ## Support
