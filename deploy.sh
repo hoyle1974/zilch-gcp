@@ -521,8 +521,27 @@ fi
 echo -e "${GREEN}✓${NC} Init complete"
 
 if [ "$ENABLE_MONITORING" = "true" ] && [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
-    echo -e "${BLUE}→${NC} Configuring billing API"
-    gcloud auth application-default set-quota-project "$PROJECT_ID" --quiet 2>/dev/null || true
+    echo -e "${BLUE}→${NC} Enabling billing budget API"
+    if ! gcloud services enable billingbudgets.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
+        echo -e "${RED}✗ Could not enable billingbudgets.googleapis.com API${NC}"
+        exit 1
+    fi
+fi
+
+if [ "$ENABLE_SCHEDULER" = "true" ]; then
+    echo -e "${BLUE}→${NC} Enabling Cloud Scheduler API"
+    if ! gcloud services enable cloudscheduler.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
+        echo -e "${RED}✗ Could not enable cloudscheduler.googleapis.com API${NC}"
+        exit 1
+    fi
+fi
+
+if [ "$ENABLE_FIRESTORE" = "true" ]; then
+    echo -e "${BLUE}→${NC} Enabling Firestore API"
+    if ! gcloud services enable firestore.googleapis.com --project="$PROJECT_ID" --quiet 2>/dev/null; then
+        echo -e "${RED}✗ Could not enable firestore.googleapis.com API${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${BLUE}→${NC} Applying infrastructure"
