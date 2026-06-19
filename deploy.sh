@@ -657,6 +657,9 @@ echo -e "${GREEN}✓${NC} Init complete"
 # They're disabled by default. Users can enable them individually if they have the requirements.
 
 echo -e "${BLUE}→${NC} Applying infrastructure"
+# Export quota project for billing API access in Terraform
+export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
+
 if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
