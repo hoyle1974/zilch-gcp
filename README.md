@@ -174,15 +174,17 @@ This is normal on subsequent runs. Zilch reuses the existing bucket.
 
 ## Documentation & Knowledge Base
 
-Zilch includes a comprehensive wiki with entity pages, topic guides, and troubleshooting resources.
+Zilch includes a wiki that synthesizes how the system works and how to build with it.
 
-### 📚 [**Start with the Wiki Index**](docs/wiki/INDEX.md)
+### 📚 [**Start with the Wiki**](docs/wiki/INDEX.md)
 
-The wiki is organized into sections:
+The wiki covers:
+- How Zilch works (Cloud Run, Terraform, Service Accounts, etc.)
+- How to deploy and configure your app
+- How to use Zilch services from your code
+- Troubleshooting common issues
 
-- **[Core Concepts](docs/wiki/entities/)** — Cloud Run, Always Free Tier, Terraform, Service Accounts, Environment Variables, etc.
-- **[Services Directory](docs/wiki/entities/services/)** — Reference for each enabled service (Firestore, Storage, Pub/Sub, BigQuery, Cloud Scheduler, etc.)
-- **[Topics & Guides](docs/wiki/topics/)** — How-to guides: First Deployment, Troubleshooting, Viewing Logs, Operations
+For detailed service documentation, refer to the official [Google Cloud docs](https://cloud.google.com).
 
 ## Capabilities
 
