@@ -274,13 +274,79 @@ confirm_gcp_action() {
     fi
 }
 
+check_firestore_permissions() {
+    local project=$1
+    local current_user=$(gcloud config get-value account 2>/dev/null)
+
+    # Check if user has Firestore Admin role
+    FIRESTORE_BINDINGS=$(gcloud projects get-iam-policy "$project" \
+        --flatten="bindings[].members" \
+        --filter="bindings.role:datastore.admin AND bindings.members:serviceAccount:* OR bindings.members:user:*" \
+        --format="value(bindings.members)" 2>/dev/null | grep -c "$current_user" || echo "0")
+
+    if [ "$FIRESTORE_BINDINGS" -gt 0 ]; then
+        return 0  # Has permission
+    else
+        return 1  # No permission
+    fi
+}
+
+setup_firestore_permissions() {
+    local project=$1
+    local current_user=$(gcloud config get-value account 2>/dev/null)
+
+    echo ""
+    echo -e "${YELLOW}⚠${NC}  ${BOLD}Firestore Admin role required${NC}"
+    echo ""
+    echo "Your account (${CYAN}${current_user}${NC}) does not have Firestore Admin role."
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo ""
+    echo "  1. ${BOLD}Self-grant role${NC} (if you have permissions):"
+    echo -e "     ${CYAN}gcloud projects add-iam-policy-binding $project \\"
+    echo "       --member=user:$current_user \\"
+    echo "       --role=roles/datastore.admin${NC}"
+    echo ""
+    echo "  2. ${BOLD}Request from GCP admin${NC}:"
+    echo -e "     Send them this command to run:"
+    echo -e "     ${CYAN}gcloud projects add-iam-policy-binding $project \\"
+    echo "       --member=user:$current_user \\"
+    echo "       --role=roles/datastore.admin${NC}"
+    echo ""
+    echo "  3. ${BOLD}Check in Cloud Console${NC}:"
+    echo -e "     ${CYAN}https://console.cloud.google.com/iam-admin/iam?project=$project${NC}"
+    echo ""
+
+    read -p "Try to grant yourself the role? ${BLUE}[y/n]${NC}: " choice
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+        if gcloud projects add-iam-policy-binding "$project" \
+            --member="user:$current_user" \
+            --role="roles/datastore.admin" \
+            --quiet 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Firestore Admin role granted"
+            return 0
+        else
+            echo -e "${RED}✗${NC} Failed to grant role (you may not have permissions to modify IAM)"
+            echo -e "   ${YELLOW}Contact your GCP admin and ask them to grant you: roles/datastore.admin${NC}"
+            return 1
+        fi
+    fi
+    return 1
+}
+
 echo ""
 echo -e "${BOLD}Services${NC}"
 ENABLE_FIRESTORE=$(prompt_toggle "Firestore" "$ENABLE_FIRESTORE")
 
-if [ "$ENABLE_FIRESTORE" == "true" ]; then
-    echo -e "${YELLOW}ℹ${NC} Firestore NATIVE requires ${BOLD}Firestore Admin${NC} (roles/datastore.admin) role"
-    echo -e "  ${CYAN}To check your roles:${NC} gcloud projects get-iam-policy \$PROJECT_ID"
+if [ "$ENABLE_FIRESTORE" == "true" ] && [ "$AUTO_MODE" = false ]; then
+    # Check if user has Firestore Admin permissions
+    if ! check_firestore_permissions "$PROJECT_ID"; then
+        if ! setup_firestore_permissions "$PROJECT_ID"; then
+            echo -e "${YELLOW}⚠${NC}  Proceeding anyway, but Terraform may fail without Firestore Admin role"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Firestore Admin role confirmed"
+    fi
 fi
 
 ENABLE_SECRET_MANAGER=$(prompt_toggle "Secret Manager" "$ENABLE_SECRET_MANAGER")
