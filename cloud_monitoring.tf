@@ -56,41 +56,36 @@ resource "google_pubsub_subscription" "budget_alerts_sub" {
 }
 
 # Billing Budget: Alert at key thresholds (50%, 100%, 150%)
-# NOTE: Billing budgets require a billing account ID, which must be retrieved manually:
-# gcloud beta billing accounts list
-# Then set the billing_account_id variable or use the GCP console to configure.
-# For now, monitoring alerts work without budgets.
-# To enable budget alerts, uncomment below and provide billing account ID.
-#
-# resource "google_billing_budget" "app_budget" {
-#   count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 ? 1 : 0
-#   billing_account  = "BILLING_ACCOUNT_ID_HERE"  # Get from: gcloud beta billing accounts list
-#   display_name     = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
-#
-#   budget_filter {
-#     projects = ["projects/${data.google_client_config.current.project}"]
-#   }
-#
-#   amount {
-#     specified_amount {
-#       currency_code = "USD"
-#       units         = floor(var.billing_budget_limit_usd)
-#       nanos         = floor((var.billing_budget_limit_usd - floor(var.billing_budget_limit_usd)) * 1000000000)
-#     }
-#   }
-#
-#   threshold_rules {
-#     threshold_percent = 50.0
-#   }
-#
-#   threshold_rules {
-#     threshold_percent = 100.0
-#   }
-#
-#   threshold_rules {
-#     threshold_percent = 150.0
-#   }
-# }
+# Requires gcp_billing_account_id to be provided during deploy.sh setup
+resource "google_billing_budget" "app_budget" {
+  count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 && var.gcp_billing_account_id != "" ? 1 : 0
+  billing_account  = var.gcp_billing_account_id
+  display_name     = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
+
+  budget_filter {
+    projects = ["projects/${data.google_client_config.current.project}"]
+  }
+
+  amount {
+    specified_amount {
+      currency_code = "USD"
+      units         = floor(var.billing_budget_limit_usd)
+      nanos         = floor((var.billing_budget_limit_usd - floor(var.billing_budget_limit_usd)) * 1000000000)
+    }
+  }
+
+  threshold_rules {
+    threshold_percent = 50.0
+  }
+
+  threshold_rules {
+    threshold_percent = 100.0
+  }
+
+  threshold_rules {
+    threshold_percent = 150.0
+  }
+}
 
 # Get current GCP project for billing budget
 data "google_client_config" "current" {}

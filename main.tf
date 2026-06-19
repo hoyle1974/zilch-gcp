@@ -177,10 +177,13 @@ resource "google_cloud_run_v2_service" "app" {
     }
   }
 
-  # Prevents Terraform from overwriting Cloud Build deployments
+  # Prevents Terraform from overwriting deployments made by gcloud CLI or Cloud Build
+  # Ignores image updates, annotations, and labels which are frequently changed externally
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].image
+      template[0].containers[0].image,
+      annotations,
+      labels
     ]
   }
 
@@ -538,15 +541,16 @@ resource "google_project_iam_member" "translate_client" {
 # --- OPTIONAL ARCHITECTURAL COMPONENT LAYERS ---
 
 # 1. Firestore System Configuration Block
-# NOTE: Commented out - requires Owner role. Users can create via gcloud if needed.
-# resource "google_firestore_database" "default" {
-#   count       = var.enable_firestore ? 1 : 0
-#   project     = var.gcp_project_id
-#   name        = "(default)"
-#   location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
-#   type        = "FIRESTORE_NATIVE"
-#   depends_on  = [google_project_service.firestore]
-# }
+# Firestore Native mode provides ACID transactions and SQL-like queries.
+# Now provisioned directly via Terraform with appropriate IAM setup.
+resource "google_firestore_database" "default" {
+  count       = var.enable_firestore ? 1 : 0
+  project     = var.gcp_project_id
+  name        = "(default)"
+  location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
+  type        = "FIRESTORE_NATIVE"
+  depends_on  = [google_project_service.firestore]
+}
 
 resource "google_project_iam_member" "firestore" {
   count   = var.enable_firestore ? 1 : 0

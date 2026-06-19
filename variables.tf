@@ -165,3 +165,9 @@ variable "allow_unauthenticated_access" {
   default     = true
   description = "Allow unauthenticated access to Cloud Run service (set to false for internal-only services like background workers or APIs)"
 }
+
+variable "gcp_billing_account_id" {
+  type        = string
+  default     = ""
+  description = "GCP Billing Account ID (from: gcloud beta billing accounts list). Required to enable budget alerts. Leave empty to disable."
+}

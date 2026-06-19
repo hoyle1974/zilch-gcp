@@ -52,39 +52,62 @@ SCHEDULER_TIMEZONE="UTC"
 SCHEDULER_ENDPOINT="/api/cron"
 BILLING_ACCOUNT_NAME="My Billing Account"
 BILLING_BUDGET_LIMIT_USD="10"
+ALLOW_UNAUTHENTICATED_ACCESS="true"
+GCP_BILLING_ACCOUNT_ID=""
 GITHUB_OWNER=""
 GITHUB_REPO=""
 
 # Load from .zilch.config if it exists (uses lowercase variable names)
 if [ -f ".zilch.config" ]; then
     echo "📋 Reading .zilch.config..."
-    source .zilch.config
-    # Map lowercase config names to uppercase internal variables
-    [ -n "$gcp_project_id" ] && PROJECT_ID="$gcp_project_id"
-    [ -n "$app_name" ] && APP_NAME="$app_name"
-    [ -n "$gcp_region" ] && GCP_REGION="$gcp_region"
-    [ -n "$enable_firestore" ] && ENABLE_FIRESTORE="$enable_firestore"
-    [ -n "$enable_secret_manager" ] && ENABLE_SECRET_MANAGER="$enable_secret_manager"
-    [ -n "$enable_cloud_storage" ] && ENABLE_CLOUD_STORAGE="$enable_cloud_storage"
-    [ -n "$enable_firebase_auth" ] && ENABLE_FIREBASE_AUTH="$enable_firebase_auth"
-    [ -n "$enable_vertex_ai" ] && ENABLE_VERTEX_AI="$enable_vertex_ai"
-    [ -n "$enable_cloud_build" ] && ENABLE_CLOUD_BUILD="$enable_cloud_build"
-    [ -n "$enable_pubsub" ] && ENABLE_PUBSUB="$enable_pubsub"
-    [ -n "$enable_cloud_tasks" ] && ENABLE_CLOUD_TASKS="$enable_cloud_tasks"
-    [ -n "$enable_bigquery" ] && ENABLE_BIGQUERY="$enable_bigquery"
-    [ -n "$enable_cloud_kms" ] && ENABLE_CLOUD_KMS="$enable_cloud_kms"
-    [ -n "$enable_vision_ai" ] && ENABLE_VISION_AI="$enable_vision_ai"
-    [ -n "$enable_speech_to_text" ] && ENABLE_SPEECH_TO_TEXT="$enable_speech_to_text"
-    [ -n "$enable_translation" ] && ENABLE_TRANSLATION="$enable_translation"
-    [ -n "$enable_scheduler" ] && ENABLE_SCHEDULER="$enable_scheduler"
-    [ -n "$enable_monitoring" ] && ENABLE_MONITORING="$enable_monitoring"
-    [ -n "$scheduler_schedule" ] && SCHEDULER_SCHEDULE="$scheduler_schedule"
-    [ -n "$scheduler_timezone" ] && SCHEDULER_TIMEZONE="$scheduler_timezone"
-    [ -n "$scheduler_endpoint" ] && SCHEDULER_ENDPOINT="$scheduler_endpoint"
-    [ -n "$billing_account_name" ] && BILLING_ACCOUNT_NAME="$billing_account_name"
-    [ -n "$billing_budget_limit_usd" ] && BILLING_BUDGET_LIMIT_USD="$billing_budget_limit_usd"
-    [ -n "$github_owner" ] && GITHUB_OWNER="$github_owner"
-    [ -n "$github_repo" ] && GITHUB_REPO="$github_repo"
+
+    # SECURITY: Parse config file safely without executing code.
+    # Instead of 'source .zilch.config' which executes arbitrary bash,
+    # use a while loop to read key=value pairs and only set whitelisted variables.
+    # This prevents injection attacks if the config file is compromised.
+
+    while IFS='=' read -r key value; do
+        # Skip comments and blank lines
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+
+        # Trim leading/trailing whitespace from key and value
+        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # Only set known, safe variables from the config file
+        case "$key" in
+            gcp_project_id) PROJECT_ID="$value" ;;
+            app_name) APP_NAME="$value" ;;
+            gcp_region) GCP_REGION="$value" ;;
+            enable_firestore) ENABLE_FIRESTORE="$value" ;;
+            enable_secret_manager) ENABLE_SECRET_MANAGER="$value" ;;
+            enable_cloud_storage) ENABLE_CLOUD_STORAGE="$value" ;;
+            enable_firebase_auth) ENABLE_FIREBASE_AUTH="$value" ;;
+            enable_vertex_ai) ENABLE_VERTEX_AI="$value" ;;
+            enable_cloud_build) ENABLE_CLOUD_BUILD="$value" ;;
+            enable_pubsub) ENABLE_PUBSUB="$value" ;;
+            enable_cloud_tasks) ENABLE_CLOUD_TASKS="$value" ;;
+            enable_bigquery) ENABLE_BIGQUERY="$value" ;;
+            enable_cloud_kms) ENABLE_CLOUD_KMS="$value" ;;
+            enable_vision_ai) ENABLE_VISION_AI="$value" ;;
+            enable_speech_to_text) ENABLE_SPEECH_TO_TEXT="$value" ;;
+            enable_translation) ENABLE_TRANSLATION="$value" ;;
+            enable_scheduler) ENABLE_SCHEDULER="$value" ;;
+            enable_monitoring) ENABLE_MONITORING="$value" ;;
+            allow_unauthenticated_access) ALLOW_UNAUTHENTICATED_ACCESS="$value" ;;
+            scheduler_schedule) SCHEDULER_SCHEDULE="$value" ;;
+            scheduler_timezone) SCHEDULER_TIMEZONE="$value" ;;
+            scheduler_endpoint) SCHEDULER_ENDPOINT="$value" ;;
+            billing_account_name) BILLING_ACCOUNT_NAME="$value" ;;
+            billing_budget_limit_usd) BILLING_BUDGET_LIMIT_USD="$value" ;;
+            gcp_billing_account_id) GCP_BILLING_ACCOUNT_ID="$value" ;;
+            github_owner) GITHUB_OWNER="$value" ;;
+            github_repo) GITHUB_REPO="$value" ;;
+            *) : ;; # Silently ignore unknown keys (future-proof)
+        esac
+    done < .zilch.config
+
     echo "✓ Configuration loaded"
 fi
 
@@ -226,6 +249,10 @@ if [ "$ENABLE_SCHEDULER" == "true" ]; then
     SCHEDULER_ENDPOINT="${INPUT:-$SCHEDULER_ENDPOINT}"
 fi
 
+# Cloud Run access control
+echo ""
+ALLOW_UNAUTHENTICATED_ACCESS=$(prompt_toggle "Allow unauthenticated access to Cloud Run service" "$ALLOW_UNAUTHENTICATED_ACCESS")
+
 ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring with Budget Alerts (emergency circuit breaker)" "$ENABLE_MONITORING")
 
 if [ "$ENABLE_MONITORING" == "true" ]; then
@@ -234,6 +261,9 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
 
     read -p "👉 Monthly budget limit in USD [$BILLING_BUDGET_LIMIT_USD]: " INPUT
     BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
+
+    read -p "👉 Enter your GCP Billing Account ID (from: gcloud beta billing accounts list) [default: none]: " INPUT
+    GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
 fi
 
 # If Cloud Build is enabled, GitHub info is required
@@ -296,6 +326,10 @@ scheduler_endpoint="${SCHEDULER_ENDPOINT}"
 enable_monitoring=${ENABLE_MONITORING}
 billing_account_name="${BILLING_ACCOUNT_NAME}"
 billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
+
+# Cloud Run Access Control & Billing
+allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}
+gcp_billing_account_id="${GCP_BILLING_ACCOUNT_ID}"
 CONFIGEOF
 echo "✓ Configuration saved to .zilch.config"
 
@@ -507,7 +541,9 @@ if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
   -var="enable_monitoring=${ENABLE_MONITORING}" \
   -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
-  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}"; then
+  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
+  -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
+  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID}"; then
     echo "❌ Terraform apply failed. Check the error above."
     echo "   Most common: insufficient permissions for required services."
     exit 1
