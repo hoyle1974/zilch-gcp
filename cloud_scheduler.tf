@@ -22,7 +22,7 @@ resource "google_cloud_scheduler_job" "app_cron" {
 
   http_target {
     http_method = "POST"
-    uri         = "${endswith(google_cloud_run_v2_service.app.uri, "/") ? substr(google_cloud_run_v2_service.app.uri, 0, length(google_cloud_run_v2_service.app.uri) - 1) : google_cloud_run_v2_service.app.uri}${var.scheduler_endpoint}"
+    uri         = "${trimsuffix(google_cloud_run_v2_service.app.uri, "/")}${var.scheduler_endpoint}"
     headers = {
       "Content-Type" = "application/json"
     }
