@@ -10,8 +10,17 @@ CYAN=$'\033[0;36m'
 BOLD=$'\033[1m'
 NC=$'\033[0m'
 
+# Check for --auto flag to skip all prompts
+AUTO_MODE=false
+if [ "$1" = "--auto" ]; then
+    AUTO_MODE=true
+fi
+
 clear
 echo -e "${BOLD}${CYAN}Zilch GCP Infrastructure Deployment${NC}"
+if [ "$AUTO_MODE" = true ]; then
+    echo -e "${BLUE}(auto mode - using defaults)${NC}"
+fi
 echo ""
 
 echo -e "${BOLD}Prerequisites${NC}"
@@ -107,11 +116,13 @@ if [ -f ".zilch.config" ]; then
 fi
 
 DEFAULT_PROJECT="${PROJECT_ID:-}"
-if [ -z "$DEFAULT_PROJECT" ]; then
-    read -p "${BLUE}GCP Project ID${NC}: " PROJECT_ID
-else
-    read -p "${BLUE}GCP Project ID${NC} ${CYAN}[${DEFAULT_PROJECT}]${NC}: " INPUT
-    PROJECT_ID="${INPUT:-$DEFAULT_PROJECT}"
+if [ "$AUTO_MODE" = false ]; then
+    if [ -z "$DEFAULT_PROJECT" ]; then
+        read -p "${BLUE}GCP Project ID${NC}: " PROJECT_ID
+    else
+        read -p "${BLUE}GCP Project ID${NC} ${CYAN}[${DEFAULT_PROJECT}]${NC}: " INPUT
+        PROJECT_ID="${INPUT:-$DEFAULT_PROJECT}"
+    fi
 fi
 if [ -z "$PROJECT_ID" ]; then
     echo -e "${RED}✗ Project ID required${NC}"
@@ -160,8 +171,12 @@ echo ""
 echo ""
 echo -e "${BOLD}Configuration${NC}"
 DEFAULT_APP_NAME="${APP_NAME:-zilch-app}"
-read -p "${BLUE}App Name${NC} ${CYAN}[${DEFAULT_APP_NAME}]${NC}: " INPUT_APP_NAME
-APP_NAME="${INPUT_APP_NAME:-$DEFAULT_APP_NAME}"
+if [ "$AUTO_MODE" = false ]; then
+    read -p "${BLUE}App Name${NC} ${CYAN}[${DEFAULT_APP_NAME}]${NC}: " INPUT_APP_NAME
+    APP_NAME="${INPUT_APP_NAME:-$DEFAULT_APP_NAME}"
+else
+    APP_NAME="${APP_NAME:-$DEFAULT_APP_NAME}"
+fi
 
 if [[ ! "$APP_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
     echo -e "${RED}✗ Invalid app name (3-30 lowercase/numbers/hyphens)${NC}"
@@ -175,22 +190,29 @@ echo -e "${BOLD}Region${NC}"
 REGION_DEFAULT="1"
 if [ "$GCP_REGION" = "us-east1" ]; then
     REGION_DEFAULT="2"
-    echo "  [1] us-central1 (Iowa)"
-    echo -e "  ${CYAN}[2] us-east1    (South Carolina) ← current${NC}"
-    echo "  [3] us-west1    (Oregon)"
 elif [ "$GCP_REGION" = "us-west1" ]; then
     REGION_DEFAULT="3"
-    echo "  [1] us-central1 (Iowa)"
-    echo "  [2] us-east1    (South Carolina)"
-    echo -e "  ${CYAN}[3] us-west1    (Oregon) ← current${NC}"
-else
-    echo -e "  ${CYAN}[1] us-central1 (Iowa) ← current${NC}"
-    echo "  [2] us-east1    (South Carolina)"
-    echo "  [3] us-west1    (Oregon)"
 fi
 
-read -p "${BLUE}Select${NC} ${CYAN}[1-3, default: ${REGION_DEFAULT}]${NC}: " REGION_CHOICE
-REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
+if [ "$AUTO_MODE" = false ]; then
+    if [ "$GCP_REGION" = "us-east1" ]; then
+        echo "  [1] us-central1 (Iowa)"
+        echo -e "  ${CYAN}[2] us-east1    (South Carolina) ← current${NC}"
+        echo "  [3] us-west1    (Oregon)"
+    elif [ "$GCP_REGION" = "us-west1" ]; then
+        echo "  [1] us-central1 (Iowa)"
+        echo "  [2] us-east1    (South Carolina)"
+        echo -e "  ${CYAN}[3] us-west1    (Oregon) ← current${NC}"
+    else
+        echo -e "  ${CYAN}[1] us-central1 (Iowa) ← current${NC}"
+        echo "  [2] us-east1    (South Carolina)"
+        echo "  [3] us-west1    (Oregon)"
+    fi
+    read -p "${BLUE}Select${NC} ${CYAN}[1-3, default: ${REGION_DEFAULT}]${NC}: " REGION_CHOICE
+    REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
+else
+    REGION_CHOICE="$REGION_DEFAULT"
+fi
 
 case "$REGION_CHOICE" in
     2) GCP_REGION="us-east1" ;;
@@ -211,8 +233,13 @@ prompt_toggle() {
         status_display=" ${CYAN}[disabled]${NC}"
     fi
 
-    read -p "${BLUE}  ${feature_name}?${NC}${status_display} ${CYAN}[y/n]${NC} " choice
-    choice="${choice:-$default_response}"
+    if [ "$AUTO_MODE" = false ]; then
+        read -p "${BLUE}  ${feature_name}?${NC}${status_display} ${CYAN}[y/n]${NC} " choice
+        choice="${choice:-$default_response}"
+    else
+        choice="$default_response"
+    fi
+
     if [[ "$choice" =~ ^[Yy]$ ]]; then
         echo "true"
     else
@@ -237,7 +264,7 @@ ENABLE_SPEECH_TO_TEXT=$(prompt_toggle "Speech-to-Text" "$ENABLE_SPEECH_TO_TEXT")
 ENABLE_TRANSLATION=$(prompt_toggle "Translation" "$ENABLE_TRANSLATION")
 ENABLE_SCHEDULER=$(prompt_toggle "Cloud Scheduler" "$ENABLE_SCHEDULER")
 
-if [ "$ENABLE_SCHEDULER" == "true" ]; then
+if [ "$ENABLE_SCHEDULER" == "true" ] && [ "$AUTO_MODE" = false ]; then
     echo ""
     echo -e "${BOLD}Scheduler Settings${NC}"
     read -p "${BLUE}Cron expression${NC} ${CYAN}[${SCHEDULER_SCHEDULE}]${NC}: " INPUT
@@ -259,10 +286,14 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
 
     echo ""
     echo -e "${BOLD}Select Billing Account${NC}"
-    BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName,masterBillingAccount)" 2>&1)
-    BILLING_LIST_EXIT=$?
+    if [ "$AUTO_MODE" = true ]; then
+        # In auto mode, skip the interactive billing account selection
+        :
+    else
+        BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName,masterBillingAccount)" 2>&1)
+        BILLING_LIST_EXIT=$?
 
-    if [ $BILLING_LIST_EXIT -eq 0 ] && [ -n "$BILLING_LIST_OUTPUT" ]; then
+        if [ $BILLING_LIST_EXIT -eq 0 ] && [ -n "$BILLING_LIST_OUTPUT" ]; then
         declare -a BILLING_IDS
         declare -a BILLING_NAMES
         index=1
@@ -296,21 +327,26 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         echo -e "  ${CYAN}https://console.cloud.google.com/billing${NC}"
         echo -e "  ${CYAN}gcloud beta billing accounts list${NC}"
         echo ""
-        read -p "${BLUE}Billing Account ID${NC} ${CYAN}[skip]${NC}: " INPUT
-        GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
+            read -p "${BLUE}Billing Account ID${NC} ${CYAN}[skip]${NC}: " INPUT
+            GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
+        fi
     fi
 fi
 
 if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
-        echo ""
-        echo -e "${BOLD}GitHub Repository${NC}"
-        read -p "${BLUE}Username/org${NC}: " GITHUB_OWNER
-        read -p "${BLUE}Repository name${NC}: " GITHUB_REPO
+        if [ "$AUTO_MODE" = false ]; then
+            echo ""
+            echo -e "${BOLD}GitHub Repository${NC}"
+            read -p "${BLUE}Username/org${NC}: " GITHUB_OWNER
+            read -p "${BLUE}Repository name${NC}: " GITHUB_REPO
+        fi
 
         if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
-            echo -e "${RED}✗ GitHub info required for Cloud Build${NC}"
-            exit 1
+            if [ "$AUTO_MODE" = false ]; then
+                echo -e "${RED}✗ GitHub info required for Cloud Build${NC}"
+                exit 1
+            fi
         fi
     fi
 fi
