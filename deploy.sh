@@ -236,23 +236,27 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
 
     echo ""
     echo "📋 GCP Billing Accounts:"
-    BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName)" 2>&1)
+    BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName,masterBillingAccount)" 2>&1)
     BILLING_LIST_EXIT=$?
 
     if [ $BILLING_LIST_EXIT -eq 0 ] && [ -n "$BILLING_LIST_OUTPUT" ]; then
-        # Interactive menu for billing account selection
         declare -a BILLING_IDS
         declare -a BILLING_NAMES
         index=1
 
-        while IFS=',' read -r account_id display_name; do
-            # Clean up quotes from CSV
+        while IFS=',' read -r account_id display_name master_account; do
             account_id=$(echo "$account_id" | sed 's/"//g')
             display_name=$(echo "$display_name" | sed 's/"//g')
+            master_account=$(echo "$master_account" | sed 's/"//g')
 
             BILLING_IDS[$index]="$account_id"
             BILLING_NAMES[$index]="$display_name"
-            printf "  [%d] %s (%s)\n" "$index" "$display_name" "$account_id"
+
+            if [ -n "$master_account" ] && [ "$master_account" != "False" ]; then
+                printf "  [%d] %s (subaccount, %s)\n" "$index" "$display_name" "$account_id"
+            else
+                printf "  [%d] %s (%s)\n" "$index" "$display_name" "$account_id"
+            fi
             index=$((index + 1))
         done <<< "$BILLING_LIST_OUTPUT"
 
