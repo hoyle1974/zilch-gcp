@@ -264,10 +264,17 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
 
     echo ""
     echo "📋 Available GCP Billing Accounts:"
-    if gcloud beta billing accounts list --format="table(name.basename():label=ACCOUNT_ID,displayName):no-heading" 2>/dev/null; then
+    if gcloud beta billing accounts list --format="table(name,displayName)" 2>/dev/null | head -20; then
         echo ""
     else
-        echo "⚠️  Could not list billing accounts. Make sure you have Billing Account Admin role."
+        echo "⚠️  Could not list billing accounts automatically."
+        echo ""
+        echo "To find your Billing Account ID:"
+        echo "  1. Visit: https://console.cloud.google.com/billing"
+        echo "  2. Select a billing account"
+        echo "  3. Copy the Account ID (format: billingAccounts/012345-678901-234567)"
+        echo ""
+        echo "Or run: gcloud beta billing accounts list"
         echo ""
     fi
     read -p "👉 Enter GCP Billing Account ID (or leave blank to skip): " INPUT
