@@ -254,7 +254,7 @@ ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring" "$ENABLE_MONITORING")
 if [ "$ENABLE_MONITORING" == "true" ]; then
     echo ""
     echo -e "${BOLD}Budget Configuration${NC}"
-    read -p "$(echo -e ${BLUE}Monthly limit (USD)${NC}) ${CYAN}[${BILLING_BUDGET_LIMIT_USD}]${NC}: " INPUT
+    read -p "${BLUE}Monthly limit (USD)${NC} ${CYAN}[${BILLING_BUDGET_LIMIT_USD}]${NC}: " INPUT
     BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
 
     echo ""
