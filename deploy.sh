@@ -262,7 +262,15 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
     read -p "👉 Monthly budget limit in USD [$BILLING_BUDGET_LIMIT_USD]: " INPUT
     BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
 
-    read -p "👉 Enter your GCP Billing Account ID (from: gcloud beta billing accounts list) [default: none]: " INPUT
+    echo ""
+    echo "📋 Available GCP Billing Accounts:"
+    if gcloud beta billing accounts list --format="table(name.basename():label=ACCOUNT_ID,displayName):no-heading" 2>/dev/null; then
+        echo ""
+    else
+        echo "⚠️  Could not list billing accounts. Make sure you have Billing Account Admin role."
+        echo ""
+    fi
+    read -p "👉 Enter GCP Billing Account ID (or leave blank to skip): " INPUT
     GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
 fi
 
