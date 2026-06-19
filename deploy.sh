@@ -108,9 +108,9 @@ fi
 
 DEFAULT_PROJECT="${PROJECT_ID:-}"
 if [ -z "$DEFAULT_PROJECT" ]; then
-    read -p "$(echo -e ${BLUE}GCP Project ID:${NC}) " PROJECT_ID
+    read -p "${BLUE}GCP Project ID${NC}: " PROJECT_ID
 else
-    read -p "$(echo -e ${BLUE}GCP Project ID${NC}) [${CYAN}${DEFAULT_PROJECT}${NC}]: " INPUT
+    read -p "${BLUE}GCP Project ID${NC} ${CYAN}[${DEFAULT_PROJECT}]${NC}: " INPUT
     PROJECT_ID="${INPUT:-$DEFAULT_PROJECT}"
 fi
 if [ -z "$PROJECT_ID" ]; then
@@ -160,7 +160,7 @@ echo ""
 echo ""
 echo -e "${BOLD}Configuration${NC}"
 DEFAULT_APP_NAME="${APP_NAME:-zilch-app}"
-read -p "$(echo -e ${BLUE}App Name${NC}) ${CYAN}[${DEFAULT_APP_NAME}]${NC}: " INPUT_APP_NAME
+read -p "${BLUE}App Name${NC} ${CYAN}[${DEFAULT_APP_NAME}]${NC}: " INPUT_APP_NAME
 APP_NAME="${INPUT_APP_NAME:-$DEFAULT_APP_NAME}"
 
 if [[ ! "$APP_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
@@ -179,7 +179,7 @@ REGION_DEFAULT="1"
 [ "$GCP_REGION" = "us-east1" ] && REGION_DEFAULT="2"
 [ "$GCP_REGION" = "us-west1" ] && REGION_DEFAULT="3"
 
-read -p "$(echo -e ${BLUE}Select${NC}) ${CYAN}[1-3]${NC}: " REGION_CHOICE
+read -p "${BLUE}Select${NC} ${CYAN}[1-3]${NC}: " REGION_CHOICE
 REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
 
 case "$REGION_CHOICE" in
@@ -195,7 +195,7 @@ prompt_toggle() {
     if [ "$current_value" = "true" ]; then
         default_response="y"
     fi
-    read -p "$(echo -e ${BLUE}  ${feature_name}?${NC}) ${CYAN}[y/n]${NC} " choice
+    read -p "${BLUE}  ${feature_name}?${NC} ${CYAN}[y/n]${NC} " choice
     choice="${choice:-$default_response}"
     if [[ "$choice" =~ ^[Yy]$ ]]; then
         echo "true"
@@ -224,9 +224,9 @@ ENABLE_SCHEDULER=$(prompt_toggle "Cloud Scheduler" "$ENABLE_SCHEDULER")
 if [ "$ENABLE_SCHEDULER" == "true" ]; then
     echo ""
     echo -e "${BOLD}Scheduler Settings${NC}"
-    read -p "$(echo -e ${BLUE}Cron expression${NC}) ${CYAN}[${SCHEDULER_SCHEDULE}]${NC}: " INPUT
+    read -p "${BLUE}Cron expression${NC} ${CYAN}[${SCHEDULER_SCHEDULE}]${NC}: " INPUT
     SCHEDULER_SCHEDULE="${INPUT:-$SCHEDULER_SCHEDULE}"
-    read -p "$(echo -e ${BLUE}Endpoint path${NC}) ${CYAN}[${SCHEDULER_ENDPOINT}]${NC}: " INPUT
+    read -p "${BLUE}Endpoint path${NC} ${CYAN}[${SCHEDULER_ENDPOINT}]${NC}: " INPUT
     SCHEDULER_ENDPOINT="${INPUT:-$SCHEDULER_ENDPOINT}"
 fi
 
@@ -268,7 +268,7 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         done <<< "$BILLING_LIST_OUTPUT"
 
         echo ""
-        read -p "$(echo -e ${BLUE}Select${NC}) ${CYAN}[1-$((index - 1)), or skip]${NC}: " CHOICE
+        read -p "${BLUE}Select${NC} ${CYAN}[1-$((index - 1)), or skip]${NC}: " CHOICE
         if [ -n "$CHOICE" ] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -lt "$index" ]; then
             GCP_BILLING_ACCOUNT_ID="${BILLING_IDS[$CHOICE]}"
             BILLING_ACCOUNT_NAME="${BILLING_NAMES[$CHOICE]}"
@@ -280,7 +280,7 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         echo -e "  ${CYAN}https://console.cloud.google.com/billing${NC}"
         echo -e "  ${CYAN}gcloud beta billing accounts list${NC}"
         echo ""
-        read -p "$(echo -e ${BLUE}Billing Account ID${NC}) ${CYAN}[skip]${NC}: " INPUT
+        read -p "${BLUE}Billing Account ID${NC} ${CYAN}[skip]${NC}: " INPUT
         GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
     fi
 fi
@@ -289,8 +289,8 @@ if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
         echo ""
         echo -e "${BOLD}GitHub Repository${NC}"
-        read -p "$(echo -e ${BLUE}Username/org${NC}): " GITHUB_OWNER
-        read -p "$(echo -e ${BLUE}Repository name${NC}): " GITHUB_REPO
+        read -p "${BLUE}Username/org${NC}: " GITHUB_OWNER
+        read -p "${BLUE}Repository name${NC}: " GITHUB_REPO
 
         if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
             echo -e "${RED}✗ GitHub info required for Cloud Build${NC}"
