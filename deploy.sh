@@ -290,7 +290,7 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         # In auto mode, skip the interactive billing account selection
         :
     else
-        BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName,masterBillingAccount)" 2>&1)
+        BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName,open)" 2>&1)
         BILLING_LIST_EXIT=$?
 
         if [ $BILLING_LIST_EXIT -eq 0 ] && [ -n "$BILLING_LIST_OUTPUT" ]; then
@@ -298,19 +298,19 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         declare -a BILLING_NAMES
         index=1
 
-        while IFS=',' read -r account_id display_name master_account; do
+        while IFS=',' read -r account_id display_name is_open; do
             account_id=$(echo "$account_id" | sed 's/"//g')
             display_name=$(echo "$display_name" | sed 's/"//g')
-            master_account=$(echo "$master_account" | sed 's/"//g')
+            is_open=$(echo "$is_open" | sed 's/"//g')
+
+            # Skip closed accounts
+            if [ "$is_open" != "True" ]; then
+                continue
+            fi
 
             BILLING_IDS[$index]="$account_id"
             BILLING_NAMES[$index]="$display_name"
-
-            if [ -n "$master_account" ] && [ "$master_account" != "False" ]; then
-                printf "  [%d] %s (subaccount, %s)\n" "$index" "$display_name" "$account_id"
-            else
-                printf "  [%d] %s (%s)\n" "$index" "$display_name" "$account_id"
-            fi
+            printf "  [%d] %s (%s)\n" "$index" "$display_name" "$account_id"
             index=$((index + 1))
         done <<< "$BILLING_LIST_OUTPUT"
 
