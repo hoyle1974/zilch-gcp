@@ -278,13 +278,11 @@ check_firestore_permissions() {
     local project=$1
     local current_user=$(gcloud config get-value account 2>/dev/null)
 
-    # Check if user has Firestore Admin role
-    FIRESTORE_BINDINGS=$(gcloud projects get-iam-policy "$project" \
+    # Check if user has Firestore Admin role by looking for user in datastore.admin bindings
+    if gcloud projects get-iam-policy "$project" \
         --flatten="bindings[].members" \
-        --filter="bindings.role:datastore.admin AND bindings.members:serviceAccount:* OR bindings.members:user:*" \
-        --format="value(bindings.members)" 2>/dev/null | grep -c "$current_user" || echo "0")
-
-    if [ "$FIRESTORE_BINDINGS" -gt 0 ]; then
+        --filter="bindings.role:datastore.admin" \
+        --format="value(bindings.members)" 2>/dev/null | grep -q "user:$current_user"; then
         return 0  # Has permission
     else
         return 1  # No permission
