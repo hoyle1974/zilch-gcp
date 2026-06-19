@@ -338,11 +338,18 @@ echo ""
 echo -e "${BOLD}Services${NC}"
 ENABLE_FIRESTORE=$(prompt_toggle "Firestore" "$ENABLE_FIRESTORE")
 
-if [ "$ENABLE_FIRESTORE" == "true" ] && [ "$AUTO_MODE" = false ]; then
+if [ "$ENABLE_FIRESTORE" == "true" ]; then
     # Check if user has Firestore Admin permissions
+    # (Run even in AUTO_MODE to fail fast before Terraform)
     if ! check_firestore_permissions "$PROJECT_ID"; then
-        if ! setup_firestore_permissions "$PROJECT_ID"; then
-            echo -e "${YELLOW}⚠${NC}  Proceeding anyway, but Terraform may fail without Firestore Admin role"
+        if [ "$AUTO_MODE" = false ]; then
+            if ! setup_firestore_permissions "$PROJECT_ID"; then
+                echo -e "${YELLOW}⚠${NC}  Proceeding anyway, but Terraform may fail without Firestore Admin role"
+            fi
+        else
+            echo -e "${RED}✗${NC} Firestore Admin role required but not found"
+            echo -e "   Grant it with: ${CYAN}gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:\$(gcloud config get-value account) --role=roles/datastore.admin${NC}"
+            exit 1
         fi
     else
         echo -e "${GREEN}✓${NC} Firestore Admin role confirmed"
@@ -379,21 +386,31 @@ ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring" "$ENABLE_MONITORING")
 
 if [ "$ENABLE_MONITORING" == "true" ]; then
     # Cloud Monitoring with billing budgets requires ADC quota project
-    if [ "$AUTO_MODE" = false ]; then
-        echo ""
-        echo -e "${BOLD}ADC Quota Project Setup${NC}"
-        echo -e "${YELLOW}ℹ${NC} Billing API requires Application Default Credentials quota project"
-        if [ -z "$PROJECT_ID" ]; then
-            # Try to get project ID from gcloud config
-            PROJECT_ID=$(gcloud config get-value project 2>/dev/null || echo "")
-        fi
+    # (Run setup even in AUTO_MODE to fail fast before Terraform)
+    echo ""
+    echo -e "${BOLD}ADC Quota Project Setup${NC}"
+    echo -e "${YELLOW}ℹ${NC} Billing API requires Application Default Credentials quota project"
+    if [ -z "$PROJECT_ID" ]; then
+        # Try to get project ID from gcloud config
+        PROJECT_ID=$(gcloud config get-value project 2>/dev/null || echo "")
+    fi
 
+    if [ "$AUTO_MODE" = false ]; then
         if confirm_gcp_action "Set up ADC quota project for ${CYAN}${PROJECT_ID}${NC}?"; then
             if gcloud auth application-default set-quota-project "$PROJECT_ID" 2>/dev/null; then
                 echo -e "${GREEN}✓${NC} ADC quota project configured"
             else
                 echo -e "${RED}✗${NC} Failed to set quota project (may not have permissions)"
             fi
+        fi
+    else
+        # In auto mode, just try to set it up without asking
+        if gcloud auth application-default set-quota-project "$PROJECT_ID" 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} ADC quota project configured"
+        else
+            echo -e "${RED}✗${NC} Failed to set quota project (may not have permissions)"
+            echo -e "   Run: ${CYAN}gcloud auth application-default set-quota-project $PROJECT_ID${NC}"
+            exit 1
         fi
     fi
 
