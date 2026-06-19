@@ -277,6 +277,12 @@ confirm_gcp_action() {
 echo ""
 echo -e "${BOLD}Services${NC}"
 ENABLE_FIRESTORE=$(prompt_toggle "Firestore" "$ENABLE_FIRESTORE")
+
+if [ "$ENABLE_FIRESTORE" == "true" ]; then
+    echo -e "${YELLOW}ℹ${NC} Firestore NATIVE requires ${BOLD}Firestore Admin${NC} (roles/datastore.admin) role"
+    echo -e "  ${CYAN}To check your roles:${NC} gcloud projects get-iam-policy \$PROJECT_ID"
+fi
+
 ENABLE_SECRET_MANAGER=$(prompt_toggle "Secret Manager" "$ENABLE_SECRET_MANAGER")
 ENABLE_CLOUD_STORAGE=$(prompt_toggle "Cloud Storage" "$ENABLE_CLOUD_STORAGE")
 ENABLE_CLOUD_BUILD=$(prompt_toggle "Cloud Build" "$ENABLE_CLOUD_BUILD")
@@ -306,6 +312,25 @@ ALLOW_UNAUTHENTICATED_ACCESS=$(prompt_toggle "Unauthenticated access" "$ALLOW_UN
 ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring" "$ENABLE_MONITORING")
 
 if [ "$ENABLE_MONITORING" == "true" ]; then
+    # Cloud Monitoring with billing budgets requires ADC quota project
+    if [ "$AUTO_MODE" = false ]; then
+        echo ""
+        echo -e "${BOLD}ADC Quota Project Setup${NC}"
+        echo -e "${YELLOW}ℹ${NC} Billing API requires Application Default Credentials quota project"
+        if [ -z "$PROJECT_ID" ]; then
+            # Try to get project ID from gcloud config
+            PROJECT_ID=$(gcloud config get-value project 2>/dev/null || echo "")
+        fi
+
+        if confirm_gcp_action "Set up ADC quota project for ${CYAN}${PROJECT_ID}${NC}?"; then
+            if gcloud auth application-default set-quota-project "$PROJECT_ID" 2>/dev/null; then
+                echo -e "${GREEN}✓${NC} ADC quota project configured"
+            else
+                echo -e "${RED}✗${NC} Failed to set quota project (may not have permissions)"
+            fi
+        fi
+    fi
+
     if [ "$AUTO_MODE" = false ]; then
         echo ""
         echo -e "${BOLD}Budget Configuration${NC}"
