@@ -76,9 +76,15 @@ if [ -f ".zilch.config" ]; then
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$key" ]] && continue
 
-        # Trim leading/trailing whitespace and quotes from key and value
+        # Trim leading/trailing whitespace from key and value
         key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # Remove all surrounding quotes (handle multiple layers from repeated saves)
+        while [[ "$value" == \"* ]] && [[ "$value" == *\" ]]; do
+            value="${value#\"}"
+            value="${value%\"}"
+        done
 
         # Only set known, safe variables from the config file
         case "$key" in
@@ -412,16 +418,16 @@ enable_translation=${ENABLE_TRANSLATION}
 
 # Phase 4: Cloud Scheduler & Monitoring (optional)
 enable_scheduler=${ENABLE_SCHEDULER}
-scheduler_schedule="${SCHEDULER_SCHEDULE}"
-scheduler_timezone="${SCHEDULER_TIMEZONE}"
-scheduler_endpoint="${SCHEDULER_ENDPOINT}"
+scheduler_schedule=${SCHEDULER_SCHEDULE}
+scheduler_timezone=${SCHEDULER_TIMEZONE}
+scheduler_endpoint=${SCHEDULER_ENDPOINT}
 enable_monitoring=${ENABLE_MONITORING}
-billing_account_name="${BILLING_ACCOUNT_NAME}"
+billing_account_name=${BILLING_ACCOUNT_NAME}
 billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
 
 # Cloud Run Access Control & Billing
 allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}
-gcp_billing_account_id="${GCP_BILLING_ACCOUNT_ID}"
+gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID}
 CONFIGEOF
 echo -e "${GREEN}✓${NC} Saved"
 
