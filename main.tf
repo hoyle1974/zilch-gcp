@@ -547,7 +547,9 @@ resource "google_firestore_database" "default" {
   count       = var.enable_firestore ? 1 : 0
   project     = var.gcp_project_id
   name        = "(default)"
-  location_id = var.gcp_region == "us-central1" ? "us-central" : var.gcp_region
+  # Firestore multi-region locations: nam5 (North America), eur3 (Europe)
+  # All three US regions (us-central1, us-east1, us-west1) map to nam5
+  location_id = "nam5"
   type        = "FIRESTORE_NATIVE"
   depends_on  = [google_project_service.firestore]
 }
