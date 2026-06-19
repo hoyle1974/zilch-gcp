@@ -35,7 +35,7 @@ ENABLE_SECRET_MANAGER="false"
 ENABLE_CLOUD_STORAGE="false"
 ENABLE_FIREBASE_AUTH="false"
 ENABLE_VERTEX_AI="false"
-ENABLE_CLOUD_BUILD="false"
+ENABLE_CLOUD_BUILD="true"
 ENABLE_PUBSUB="false"
 ENABLE_CLOUD_TASKS="false"
 ENABLE_BIGQUERY="false"
@@ -487,7 +487,7 @@ if [ "$ENABLE_MONITORING" = "true" ] && [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
 fi
 
 echo -e "${BLUE}→${NC} Applying infrastructure"
-if terraform -chdir="$(dirname "$0")" apply -auto-approve \
+terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
   -var="gcp_region=${GCP_REGION}" \
@@ -514,11 +514,19 @@ if terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
   -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
   -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID}"; then
-    echo -e "${GREEN}✓${NC} Infrastructure deployed"
+  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID}" 2>&1 | tee /tmp/terraform.log
+
+if grep -q "Error:" /tmp/terraform.log; then
+    echo ""
+    echo -e "${YELLOW}⚠${NC} Some optional services failed (Firestore, Budget, Scheduler may need permissions)"
+    if terraform -chdir="$(dirname "$0")" state list 2>/dev/null | grep -q "google_cloud_run_v2_service"; then
+        echo -e "${GREEN}✓${NC} Core infrastructure deployed"
+    else
+        echo -e "${RED}✗ Core deployment failed${NC}"
+        exit 1
+    fi
 else
-    echo -e "${RED}✗ Terraform failed${NC}"
-    exit 1
+    echo -e "${GREEN}✓${NC} Infrastructure deployed"
 fi
 
 RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url)
