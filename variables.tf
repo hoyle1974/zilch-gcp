@@ -29,7 +29,7 @@ variable "app_name" {
 variable "enable_firestore" {
   type        = bool
   default     = false
-  description = "Enable Firestore NoSQL Database (free tier: 1GB storage, 50K reads/day)"
+  description = "Enable Firestore NoSQL Database (requires Firestore Admin IAM role; free tier: 1GB storage, 50K reads/day)"
 }
 
 variable "enable_secret_manager" {
@@ -145,7 +145,7 @@ variable "scheduler_endpoint" {
 variable "enable_monitoring" {
   type        = bool
   default     = false
-  description = "Enable Cloud Monitoring with budget alerts (emergency circuit breaker)"
+  description = "Enable Cloud Monitoring with budget alerts (requires `gcloud auth application-default set-quota-project <project-id>` for billing API access)"
 }
 
 variable "billing_account_name" {
