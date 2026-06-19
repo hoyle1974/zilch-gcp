@@ -557,6 +557,16 @@ if [ "$TF_INIT_SUCCESS" = false ]; then
     exit 1
 fi
 
+# Pre-flight check: Set ADC quota project if monitoring/billing is enabled
+if [ "$ENABLE_MONITORING" = "true" ] && [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
+    echo ""
+    echo "🔐 Configuring ADC quota project for billing API..."
+    if ! gcloud auth application-default set-quota-project "$PROJECT_ID" --quiet 2>/dev/null; then
+        echo "⚠️  Warning: Could not set ADC quota project. Billing budget may fail."
+        echo "   Try running manually: gcloud auth application-default set-quota-project $PROJECT_ID"
+    fi
+fi
+
 echo "🏗️ Applying architectural blueprint definitions to Google Cloud..."
 if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
