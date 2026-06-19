@@ -1,27 +1,29 @@
 #!/bin/bash
 set -e
 
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
 clear
-echo "=========================================="
-echo "  Zilch GCP Infrastructure Deployment"
-echo "=========================================="
+echo -e "${BOLD}${CYAN}Zilch GCP Infrastructure Deployment${NC}"
 echo ""
 
-echo "Checking prerequisites..."
-echo ""
-
+echo -e "${BOLD}Prerequisites${NC}"
 if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q '@'; then
-    echo "Error: No active gcloud authentication."
+    echo -e "${RED}✗ No active gcloud authentication${NC}"
     echo ""
-    echo "Log in first:"
     echo "  gcloud auth login"
-    echo ""
-    echo "Then run deploy.sh again."
     exit 1
 fi
 
 CURRENT_USER=$(gcloud config get-value account)
-echo "Authenticated as: ${CURRENT_USER}"
+echo -e "${GREEN}✓${NC} Authenticated as ${CYAN}${CURRENT_USER}${NC}"
 
 # --- LOAD CONFIG EARLY (before any prompts) ---
 # Initialize defaults
@@ -55,7 +57,7 @@ GITHUB_REPO=""
 
 # Load from .zilch.config if it exists (uses lowercase variable names)
 if [ -f ".zilch.config" ]; then
-    echo "Loading .zilch.config..."
+    echo -e "${BLUE}→${NC} Loading ${CYAN}.zilch.config${NC}"
 
     # Parse config file safely without executing code. Whitelist variables to prevent injection.
 
@@ -101,41 +103,43 @@ if [ -f ".zilch.config" ]; then
         esac
     done < .zilch.config
 
-    echo "Configuration loaded"
+    echo -e "${GREEN}✓${NC} Loaded"
 fi
 
 DEFAULT_PROJECT="${PROJECT_ID:-}"
 if [ -z "$DEFAULT_PROJECT" ]; then
-    read -p "GCP Project ID: " PROJECT_ID
+    read -p "$(echo -e ${BLUE}GCP Project ID:${NC}) " PROJECT_ID
 else
-    read -p "GCP Project ID [$DEFAULT_PROJECT]: " INPUT
+    read -p "$(echo -e ${BLUE}GCP Project ID${NC}) [${CYAN}${DEFAULT_PROJECT}${NC}]: " INPUT
     PROJECT_ID="${INPUT:-$DEFAULT_PROJECT}"
 fi
 if [ -z "$PROJECT_ID" ]; then
-    echo "Error: Project ID cannot be empty."
+    echo -e "${RED}✗ Project ID required${NC}"
     exit 1
 fi
 
 if ! gcloud projects describe "$PROJECT_ID" &>/dev/null; then
-    echo "Error: Project '$PROJECT_ID' not found or no access."
+    echo -e "${RED}✗ Project ${CYAN}${PROJECT_ID}${RED} not found or no access${NC}"
     exit 1
 fi
+echo -e "${GREEN}✓${NC} Project ${CYAN}${PROJECT_ID}${NC}"
 
-echo "Checking IAM permissions..."
+echo -e "${BOLD}Verification${NC}"
 ROLE_CHECK=$(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten="bindings[].members" \
   --filter="bindings.members:user:${CURRENT_USER} AND (bindings.role:roles/editor OR bindings.role:roles/owner)" \
   --format="value(bindings.role)" 2>/dev/null | head -1)
 
 if [ -z "$ROLE_CHECK" ]; then
-    echo "Error: Need Editor or Owner role on ${PROJECT_ID}."
+    echo -e "${RED}✗ Need Editor or Owner role on ${CYAN}${PROJECT_ID}${NC}"
     echo ""
-    echo "Ask your admin to run:"
-    echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} \\"
-    echo "    --member=user:${CURRENT_USER} \\"
-    echo "    --role=roles/editor"
+    echo "Ask your admin:"
+    echo -e "  ${CYAN}gcloud projects add-iam-policy-binding ${PROJECT_ID} \\${NC}"
+    echo -e "    ${CYAN}--member=user:${CURRENT_USER} \\${NC}"
+    echo -e "    ${CYAN}--role=roles/editor${NC}"
     exit 1
 fi
+echo -e "${GREEN}✓${NC} IAM permissions OK"
 
 if [ "$ENABLE_FIRESTORE" = "true" ]; then
     FIRESTORE_ROLE=$(gcloud projects get-iam-policy "$PROJECT_ID" \
@@ -144,27 +148,28 @@ if [ "$ENABLE_FIRESTORE" = "true" ]; then
       --format="value(bindings.role)" 2>/dev/null | head -1)
 
     if [ -z "$FIRESTORE_ROLE" ]; then
-        echo "Warning: You may not have Firestore Admin role. If creation fails, ask your admin:"
-        echo "  gcloud projects add-iam-policy-binding ${PROJECT_ID} \\"
-        echo "    --member=user:${CURRENT_USER} \\"
-        echo "    --role=roles/datastore.admin"
+        echo -e "${YELLOW}⚠${NC} Firestore Admin role may be needed"
+        echo "If creation fails, ask your admin:"
+        echo -e "  ${CYAN}gcloud projects add-iam-policy-binding ${PROJECT_ID} \\${NC}"
+        echo -e "    ${CYAN}--member=user:${CURRENT_USER} \\${NC}"
+        echo -e "    ${CYAN}--role=roles/datastore.admin${NC}"
         echo ""
     fi
 fi
 echo ""
 echo ""
-echo "App Name:"
+echo -e "${BOLD}Configuration${NC}"
 DEFAULT_APP_NAME="${APP_NAME:-zilch-app}"
-read -p "  [$DEFAULT_APP_NAME]: " INPUT_APP_NAME
+read -p "$(echo -e ${BLUE}App Name${NC}) ${CYAN}[${DEFAULT_APP_NAME}]${NC}: " INPUT_APP_NAME
 APP_NAME="${INPUT_APP_NAME:-$DEFAULT_APP_NAME}"
 
 if [[ ! "$APP_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
-    echo "Error: App name must be 3-30 lowercase characters, numbers, or hyphens."
+    echo -e "${RED}✗ Invalid app name (3-30 lowercase/numbers/hyphens)${NC}"
     exit 1
 fi
 
 echo ""
-echo "Region (Always Free Eligible):"
+echo -e "${BOLD}Region${NC}"
 echo "  [1] us-central1 (Iowa - Preferred Default)"
 echo "  [2] us-east1    (South Carolina)"
 echo "  [3] us-west1    (Oregon)"
@@ -174,7 +179,7 @@ REGION_DEFAULT="1"
 [ "$GCP_REGION" = "us-east1" ] && REGION_DEFAULT="2"
 [ "$GCP_REGION" = "us-west1" ] && REGION_DEFAULT="3"
 
-read -p "  [1-3, default: $REGION_DEFAULT]: " REGION_CHOICE
+read -p "$(echo -e ${BLUE}Select${NC}) ${CYAN}[1-3]${NC}: " REGION_CHOICE
 REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
 
 case "$REGION_CHOICE" in
@@ -190,7 +195,7 @@ prompt_toggle() {
     if [ "$current_value" = "true" ]; then
         default_response="y"
     fi
-    read -p "  $feature_name? (y/n) [default: $default_response]: " choice
+    read -p "$(echo -e ${BLUE}  ${feature_name}?${NC}) ${CYAN}[y/n]${NC} " choice
     choice="${choice:-$default_response}"
     if [[ "$choice" =~ ^[Yy]$ ]]; then
         echo "true"
@@ -200,7 +205,7 @@ prompt_toggle() {
 }
 
 echo ""
-echo "Services:"
+echo -e "${BOLD}Services${NC}"
 ENABLE_FIRESTORE=$(prompt_toggle "Firestore" "$ENABLE_FIRESTORE")
 ENABLE_SECRET_MANAGER=$(prompt_toggle "Secret Manager" "$ENABLE_SECRET_MANAGER")
 ENABLE_CLOUD_STORAGE=$(prompt_toggle "Cloud Storage" "$ENABLE_CLOUD_STORAGE")
@@ -218,24 +223,26 @@ ENABLE_SCHEDULER=$(prompt_toggle "Cloud Scheduler" "$ENABLE_SCHEDULER")
 
 if [ "$ENABLE_SCHEDULER" == "true" ]; then
     echo ""
-    echo "Scheduler settings:"
-    read -p "  Cron expression [$SCHEDULER_SCHEDULE]: " INPUT
+    echo -e "${BOLD}Scheduler Settings${NC}"
+    read -p "$(echo -e ${BLUE}Cron expression${NC}) ${CYAN}[${SCHEDULER_SCHEDULE}]${NC}: " INPUT
     SCHEDULER_SCHEDULE="${INPUT:-$SCHEDULER_SCHEDULE}"
-    read -p "  Endpoint path [$SCHEDULER_ENDPOINT]: " INPUT
+    read -p "$(echo -e ${BLUE}Endpoint path${NC}) ${CYAN}[${SCHEDULER_ENDPOINT}]${NC}: " INPUT
     SCHEDULER_ENDPOINT="${INPUT:-$SCHEDULER_ENDPOINT}"
 fi
 
 echo ""
-echo "Configuration:"
-ALLOW_UNAUTHENTICATED_ACCESS=$(prompt_toggle "Allow unauthenticated access" "$ALLOW_UNAUTHENTICATED_ACCESS")
-ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring (with budget alerts)" "$ENABLE_MONITORING")
+echo -e "${BOLD}Access & Monitoring${NC}"
+ALLOW_UNAUTHENTICATED_ACCESS=$(prompt_toggle "Unauthenticated access" "$ALLOW_UNAUTHENTICATED_ACCESS")
+ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring" "$ENABLE_MONITORING")
 
 if [ "$ENABLE_MONITORING" == "true" ]; then
-    read -p "👉 Monthly budget limit in USD [$BILLING_BUDGET_LIMIT_USD]: " INPUT
+    echo ""
+    echo -e "${BOLD}Budget Configuration${NC}"
+    read -p "$(echo -e ${BLUE}Monthly limit (USD)${NC}) ${CYAN}[${BILLING_BUDGET_LIMIT_USD}]${NC}: " INPUT
     BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
 
     echo ""
-    echo "📋 GCP Billing Accounts:"
+    echo -e "${BOLD}Select Billing Account${NC}"
     BILLING_LIST_OUTPUT=$(gcloud beta billing accounts list --format="csv[no-heading](name,displayName,masterBillingAccount)" 2>&1)
     BILLING_LIST_EXIT=$?
 
@@ -261,41 +268,39 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
         done <<< "$BILLING_LIST_OUTPUT"
 
         echo ""
-        read -p "  Select [1-$((index - 1)), or skip]: " CHOICE
+        read -p "$(echo -e ${BLUE}Select${NC}) ${CYAN}[1-$((index - 1)), or skip]${NC}: " CHOICE
         if [ -n "$CHOICE" ] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -lt "$index" ]; then
             GCP_BILLING_ACCOUNT_ID="${BILLING_IDS[$CHOICE]}"
             BILLING_ACCOUNT_NAME="${BILLING_NAMES[$CHOICE]}"
         fi
     else
-        echo "Could not list billing accounts (requires org-level 'Billing Account User' role)."
+        echo -e "${YELLOW}⚠${NC} Could not list (requires org-level Billing Account User role)"
         echo ""
-        echo "Find your Billing Account ID:"
-        echo "  1. GCP Console: https://console.cloud.google.com/billing"
-        echo "  2. Run: gcloud beta billing accounts list"
-        echo "  3. Ask your Billing Account Admin"
+        echo "Find your ID:"
+        echo -e "  ${CYAN}https://console.cloud.google.com/billing${NC}"
+        echo -e "  ${CYAN}gcloud beta billing accounts list${NC}"
         echo ""
-        read -p "  Billing Account ID (or skip): " INPUT
+        read -p "$(echo -e ${BLUE}Billing Account ID${NC}) ${CYAN}[skip]${NC}: " INPUT
         GCP_BILLING_ACCOUNT_ID="${INPUT:-}"
     fi
 fi
 
-# If Cloud Build is enabled, GitHub info is required
 if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
         echo ""
-        echo "Cloud Build requires GitHub repository connection."
-        read -p "  GitHub username/org: " GITHUB_OWNER
-        read -p "  GitHub repository name: " GITHUB_REPO
+        echo -e "${BOLD}GitHub Repository${NC}"
+        read -p "$(echo -e ${BLUE}Username/org${NC}): " GITHUB_OWNER
+        read -p "$(echo -e ${BLUE}Repository name${NC}): " GITHUB_REPO
 
         if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
-            echo "Error: GitHub credentials are required for Cloud Build."
+            echo -e "${RED}✗ GitHub info required for Cloud Build${NC}"
             exit 1
         fi
     fi
 fi
 
 echo ""
-echo "Saving configuration..."
+echo -e "${BOLD}Saving Configuration${NC}"
 cat > .zilch.config << CONFIGEOF
 # Zilch Reference App Configuration
 # This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 + Phase 4 services
@@ -342,11 +347,12 @@ billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
 allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}
 gcp_billing_account_id="${GCP_BILLING_ACCOUNT_ID}"
 CONFIGEOF
-echo "Configuration saved"
+echo -e "${GREEN}✓${NC} Saved"
 
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
 echo ""
-echo "Setting up state bucket..."
+echo -e "${BOLD}Infrastructure Setup${NC}"
+echo -e "${BLUE}→${NC} State bucket ${CYAN}${STATE_BUCKET}${NC}"
 
 # Always attempt to create the bucket (idempotent: succeeds if exists, fails only on real errors)
 BUCKET_CREATED=false
@@ -355,13 +361,13 @@ if gcloud storage buckets create "gs://${STATE_BUCKET}" \
     --location="$GCP_REGION" \
     --uniform-bucket-level-access \
     &>/dev/null 2>&1; then
-    echo "Created: gs://${STATE_BUCKET}"
+    echo -e "${GREEN}✓${NC} Created bucket"
     BUCKET_CREATED=true
 else
     if gcloud storage buckets describe "gs://${STATE_BUCKET}" &>/dev/null 2>&1; then
-        echo "Using existing: gs://${STATE_BUCKET}"
+        echo -e "${GREEN}✓${NC} Using existing bucket"
     else
-        echo "Error: Failed to create or access bucket 'gs://${STATE_BUCKET}'."
+        echo -e "${RED}✗ Failed to access bucket${NC}"
         exit 1
     fi
 fi
@@ -432,7 +438,8 @@ if [ "$BUCKET_CREATED" = true ]; then
 fi
 
 echo ""
-echo "Terraform init..."
+echo -e "${BOLD}Terraform${NC}"
+echo -e "${BLUE}→${NC} Initializing"
 TF_INIT_SUCCESS=false
 TF_INIT_RETRIES=0
 TF_MAX_RETRIES=3
@@ -453,17 +460,18 @@ while [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; do
 done
 
 if [ "$TF_INIT_SUCCESS" = false ]; then
-    echo "Error: Terraform init failed after $TF_MAX_RETRIES attempts."
+    echo -e "${RED}✗ Terraform init failed${NC}"
     exit 1
 fi
+echo -e "${GREEN}✓${NC} Init complete"
 
 if [ "$ENABLE_MONITORING" = "true" ] && [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
-    echo "Setting ADC quota project for billing..."
+    echo -e "${BLUE}→${NC} Configuring billing API"
     gcloud auth application-default set-quota-project "$PROJECT_ID" --quiet 2>/dev/null || true
 fi
 
-echo "Applying Terraform..."
-if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
+echo -e "${BLUE}→${NC} Applying infrastructure"
+if terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="gcp_project_id=${PROJECT_ID}" \
   -var="app_name=${APP_NAME}" \
   -var="gcp_region=${GCP_REGION}" \
@@ -491,15 +499,16 @@ if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
   -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
   -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID}"; then
-    echo "❌ Terraform apply failed. Check the error above."
-    echo "   Most common: insufficient permissions for required services."
+    echo -e "${GREEN}✓${NC} Infrastructure deployed"
+else
+    echo -e "${RED}✗ Terraform failed${NC}"
     exit 1
 fi
 
-# 8. Post-Deployment Endpoint Performance Validation Checks
 RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url)
 echo ""
-echo "🔍 Initiating app endpoint connection checks at: ${RUN_URL}"
+echo -e "${BOLD}Post-Deployment Checks${NC}"
+echo -e "${BLUE}→${NC} Testing endpoint ${CYAN}${RUN_URL}${NC}"
 
 RETRY_COUNT=0
 MAX_RETRIES=3
@@ -514,27 +523,26 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         break
     fi
     RETRY_COUNT=$((RETRY_COUNT+1))
-    echo "⚠️ Ping response read: HTTP ${HTTP_STATUS}. Retrying engine connection ($RETRY_COUNT/$MAX_RETRIES) in 5s..."
+    echo -e "${YELLOW}⚠${NC} HTTP ${HTTP_STATUS}, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
     sleep 5
 done
 
 if [ "$HEALTHY" = false ]; then
-    echo "🚨 Warning: App deployed but automated health checks timed out."
-    echo "Review your Cloud Run execution engine console logs to trace unexpected boot failures."
+    echo -e "${YELLOW}⚠${NC} Health check timed out"
+else
+    echo -e "${GREEN}✓${NC} App is responding"
 fi
 
 # Config already saved early (before Terraform) for quick recovery on failure
 
-# 9. Format Summary Diagnostics Output
 echo ""
-echo "================================================================="
-echo " 🎉 SUCCESS: Zilch Architecture Instantiated Successfully! "
-echo "================================================================="
-echo "📍 Service Endpoint URL: ${RUN_URL}"
-echo "👤 Bound Run Identity:   $(terraform -chdir="$(dirname "$0")" output -raw service_account_email)"
-echo "🌐 Operational Region:   ${GCP_REGION}"
+echo -e "${GREEN}${BOLD}Deployment Complete${NC}"
 echo ""
-echo "📋 Available Runtime Application Discovery Environment Tunnels:"
+echo -e "  Endpoint:  ${CYAN}${RUN_URL}${NC}"
+echo -e "  Identity:  ${CYAN}$(terraform -chdir="$(dirname "$0")" output -raw service_account_email)${NC}"
+echo -e "  Region:    ${CYAN}${GCP_REGION}${NC}"
+echo ""
+echo -e "${BOLD}Configured Services:${NC}"
 if [ "$ENABLE_FIRESTORE" == "true" ]; then echo "  ↳ ZILCH_FIRESTORE_DATABASE : (default)"; fi
 if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then echo "  ↳ ZILCH_SECRET_PREFIX      : ${APP_NAME}-"; fi
 if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform -chdir="$(dirname "$0")" output -raw storage_bucket 2>/dev/null)"; fi
@@ -551,13 +559,11 @@ if [ "$ENABLE_TRANSLATION" == "true" ]; then echo "  ↳ ZILCH_TRANSLATION_ENABL
 if [ "$ENABLE_SCHEDULER" == "true" ]; then echo "  ↳ ZILCH_SCHEDULER_ENABLED  : ${SCHEDULER_SCHEDULE} (${SCHEDULER_TIMEZONE})"; fi
 if [ "$ENABLE_MONITORING" == "true" ]; then echo "  ↳ ZILCH_MONITORING_ENABLED : ${BILLING_BUDGET_LIMIT_USD} USD/month alert"; fi
 echo ""
-echo "💡 Reminder: Your setup operates completely on Google's Free tier limits."
-echo "   Track parameters safely via: https://cloud.google.com/always-free"
-echo ""
-echo "📚 Next Steps:"
-echo "   1. Deploy your code: gcloud run deploy ${APP_NAME} --source ."
-echo "   2. View logs: gcloud run logs read ${APP_NAME} --region=${GCP_REGION}"
+echo -e "${BOLD}Next Steps:${NC}"
+echo -e "  ${CYAN}gcloud run deploy ${APP_NAME} --source .${NC}"
+echo -e "  ${CYAN}gcloud run logs read ${APP_NAME} --region=${GCP_REGION}${NC}"
 if [ "$ENABLE_FIREBASE_AUTH" == "true" ]; then
-    echo "   3. Configure auth: https://console.firebase.google.com/project/${PROJECT_ID}/authentication"
+    echo -e "  ${CYAN}https://console.firebase.google.com/project/${PROJECT_ID}/auth${NC}"
 fi
-echo "================================================================="
+echo ""
+echo -e "Always Free limits: ${CYAN}https://cloud.google.com/always-free${NC}"
