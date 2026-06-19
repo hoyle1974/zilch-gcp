@@ -279,13 +279,16 @@ ALLOW_UNAUTHENTICATED_ACCESS=$(prompt_toggle "Unauthenticated access" "$ALLOW_UN
 ENABLE_MONITORING=$(prompt_toggle "Cloud Monitoring" "$ENABLE_MONITORING")
 
 if [ "$ENABLE_MONITORING" == "true" ]; then
-    echo ""
-    echo -e "${BOLD}Budget Configuration${NC}"
-    read -p "${BLUE}Monthly limit (USD)${NC} ${CYAN}[${BILLING_BUDGET_LIMIT_USD}]${NC}: " INPUT
-    BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
+    if [ "$AUTO_MODE" = false ]; then
+        echo ""
+        echo -e "${BOLD}Budget Configuration${NC}"
+        read -p "${BLUE}Monthly limit (USD)${NC} ${CYAN}[${BILLING_BUDGET_LIMIT_USD}]${NC}: " INPUT
+        BILLING_BUDGET_LIMIT_USD="${INPUT:-$BILLING_BUDGET_LIMIT_USD}"
 
-    echo ""
-    echo -e "${BOLD}Select Billing Account${NC}"
+        echo ""
+        echo -e "${BOLD}Select Billing Account${NC}"
+    fi
+
     if [ "$AUTO_MODE" = true ]; then
         # In auto mode, skip the interactive billing account selection
         :
