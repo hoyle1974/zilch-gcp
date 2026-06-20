@@ -2,6 +2,7 @@ locals {
   mysql_enabled = var.enable_mysql
 
   # Generate unique suffix for resources to avoid naming conflicts
+  # (random_id.mysql_suffix is defined in Task 3: add random ID generators)
   mysql_resource_suffix = try(random_id.mysql_suffix[0].hex, "")
 
   # Construct VM name
@@ -27,6 +28,5 @@ locals {
   mysql_labels = {
     service    = "mysql"
     managed_by = "zilch"
-    created_at = timestamp()
   }
 }
