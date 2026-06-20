@@ -16,13 +16,6 @@ provider "google" {
   region  = var.gcp_region
 }
 
-# Fetch MySQL app password from Secret Manager for Cloud Run env var
-data "google_secret_manager_secret_version" "mysql_app_password" {
-  count   = var.enable_mysql ? 1 : 0
-  secret  = google_secret_manager_secret.mysql_app_password[0].id
-  version = "latest"
-}
-
 # --- CORE PLATFORM SYSTEM RESOURCES ---
 
 resource "google_project_service" "run" {
@@ -222,9 +215,17 @@ resource "google_cloud_run_v2_service" "app" {
         name  = "ZILCH_MYSQL_USER"
         value = var.enable_mysql ? var.mysql_user : ""
       }
-      env {
-        name  = "ZILCH_MYSQL_PASSWORD"
-        value = var.enable_mysql ? data.google_secret_manager_secret_version.mysql_app_password[0].secret_data : ""
+      dynamic "env" {
+        for_each = var.enable_mysql ? [1] : []
+        content {
+          name = "ZILCH_MYSQL_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.mysql_app_password[0].id
+              version = "latest"
+            }
+          }
+        }
       }
       env {
         name  = "ZILCH_MYSQL_VM_NAME"
