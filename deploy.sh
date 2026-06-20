@@ -1173,13 +1173,17 @@ fi
 
 # KMS Key Ring
 if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
-    KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
-    if [ -n "$KEYRING" ]; then
+    KEYRING_NAME=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(displayName)" 2>/dev/null | head -1)
+    if [ -z "$KEYRING_NAME" ]; then
+        # Fallback: extract just the name from full path if needed
+        KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
+        KEYRING_NAME=$(echo "$KEYRING" | sed 's|.*/||')
+    fi
+    if [ -n "$KEYRING_NAME" ]; then
         if ! is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
             echo -e "${BLUE}→${NC} Found KMS key ring in GCP but not in Terraform state"
-            # Use full resource path: projects/PROJECT/locations/REGION/keyRings/NAME
-            KMS_KEYRING_RESOURCE="projects/${PROJECT_ID}/locations/${GCP_REGION}/keyRings/${KEYRING}"
-            if import_resource "google_kms_key_ring.app_keys[0]" "$KMS_KEYRING_RESOURCE"; then
+            # Use short format: location/keyringName
+            if import_resource "google_kms_key_ring.app_keys[0]" "${GCP_REGION}/${KEYRING_NAME}"; then
                 echo -e "${GREEN}✓${NC} Imported KMS key ring"
             else
                 echo -e "${RED}✗${NC} Failed to import KMS key ring"
@@ -1196,12 +1200,16 @@ if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
     if is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
         if ! is_in_terraform_state "google_kms_crypto_key.app_key[0]"; then
             CRYPTOKEY="${APP_NAME}-key"
-            KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
-            if [ -n "$KEYRING" ] && gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING}" --project="${PROJECT_ID}" --filter="name:${CRYPTOKEY}" &>/dev/null 2>&1; then
+            KEYRING_NAME=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(displayName)" 2>/dev/null | head -1)
+            if [ -z "$KEYRING_NAME" ]; then
+                # Fallback: extract just the name from full path
+                KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
+                KEYRING_NAME=$(echo "$KEYRING" | sed 's|.*/||')
+            fi
+            if [ -n "$KEYRING_NAME" ] && gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING_NAME}" --project="${PROJECT_ID}" --filter="name:${CRYPTOKEY}" &>/dev/null 2>&1; then
                 echo -e "${BLUE}→${NC} Found KMS crypto key in GCP but not in Terraform state"
-                # Use full resource path: projects/PROJECT/locations/REGION/keyRings/KEYRING/cryptoKeys/NAME
-                KMS_CRYPTOKEY_RESOURCE="projects/${PROJECT_ID}/locations/${GCP_REGION}/keyRings/${KEYRING}/cryptoKeys/${CRYPTOKEY}"
-                if import_resource "google_kms_crypto_key.app_key[0]" "$KMS_CRYPTOKEY_RESOURCE"; then
+                # Use short format: location/keyring/cryptoKeys/name
+                if import_resource "google_kms_crypto_key.app_key[0]" "${GCP_REGION}/${KEYRING_NAME}/cryptoKeys/${CRYPTOKEY}"; then
                     echo -e "${GREEN}✓${NC} Imported KMS crypto key"
                 else
                     echo -e "${RED}✗${NC} Failed to import KMS crypto key"
