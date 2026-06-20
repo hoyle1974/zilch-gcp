@@ -80,3 +80,43 @@ data "google_compute_subnetwork" "default" {
   region  = var.gcp_region
   project = var.gcp_project_id
 }
+
+# Firewall rule: Allow Cloud Run to connect to MySQL
+resource "google_compute_firewall" "mysql_from_cloud_run" {
+  count     = var.enable_mysql ? 1 : 0
+  name      = "allow-cloud-run-to-mysql-${local.mysql_resource_suffix}"
+  network   = "default"
+  project   = var.gcp_project_id
+  direction = "INGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["3306"]
+  }
+
+  # Allow from Cloud Run service account
+  source_service_accounts = [google_service_account.app.email]
+  target_service_accounts = [google_service_account.mysql[0].email]
+
+  depends_on = [google_service_account.mysql]
+}
+
+# Firewall rule: Allow SSH for bastion access
+resource "google_compute_firewall" "mysql_ssh" {
+  count     = var.enable_mysql ? 1 : 0
+  name      = "allow-ssh-to-mysql-${local.mysql_resource_suffix}"
+  network   = "default"
+  project   = var.gcp_project_id
+  direction = "INGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  # Allow SSH from anywhere (GCP Cloud Shell, local machines)
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = [local.mysql_network_tag]
+}
