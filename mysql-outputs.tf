@@ -53,13 +53,13 @@ output "mysql_enabled" {
 
 # Environment variables for Cloud Run
 output "zilch_mysql_host" {
-  value       = try(google_compute_instance.mysql[0].network_interface[0].network_ip, "")
-  description = "Environment variable: ZILCH_MYSQL_HOST"
+  value       = try(google_compute_instance.mysql[0].network_interface[0].access_config[0].nat_ip, google_compute_instance.mysql[0].network_interface[0].network_ip, "")
+  description = "Environment variable: ZILCH_MYSQL_HOST (public IP)"
 }
 
 output "zilch_mysql_port" {
-  value       = var.enable_mysql ? "3306" : ""
-  description = "Environment variable: ZILCH_MYSQL_PORT"
+  value       = var.enable_mysql ? tostring(random_integer.mysql_port[0].result) : ""
+  description = "Environment variable: ZILCH_MYSQL_PORT (randomized per deployment)"
 }
 
 output "zilch_mysql_database" {

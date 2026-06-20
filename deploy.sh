@@ -1177,7 +1177,9 @@ if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
     if [ -n "$KEYRING" ]; then
         if ! is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
             echo -e "${BLUE}→${NC} Found KMS key ring in GCP but not in Terraform state"
-            if import_resource "google_kms_key_ring.app_keys[0]" "${GCP_REGION}/${KEYRING}"; then
+            # Use full resource path: projects/PROJECT/locations/REGION/keyRings/NAME
+            KMS_KEYRING_RESOURCE="projects/${PROJECT_ID}/locations/${GCP_REGION}/keyRings/${KEYRING}"
+            if import_resource "google_kms_key_ring.app_keys[0]" "$KMS_KEYRING_RESOURCE"; then
                 echo -e "${GREEN}✓${NC} Imported KMS key ring"
             else
                 echo -e "${RED}✗${NC} Failed to import KMS key ring"
@@ -1197,7 +1199,9 @@ if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
             KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
             if [ -n "$KEYRING" ] && gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING}" --project="${PROJECT_ID}" --filter="name:${CRYPTOKEY}" &>/dev/null 2>&1; then
                 echo -e "${BLUE}→${NC} Found KMS crypto key in GCP but not in Terraform state"
-                if import_resource "google_kms_crypto_key.app_key[0]" "${GCP_REGION}/${KEYRING}/cryptoKeys/${CRYPTOKEY}"; then
+                # Use full resource path: projects/PROJECT/locations/REGION/keyRings/KEYRING/cryptoKeys/NAME
+                KMS_CRYPTOKEY_RESOURCE="projects/${PROJECT_ID}/locations/${GCP_REGION}/keyRings/${KEYRING}/cryptoKeys/${CRYPTOKEY}"
+                if import_resource "google_kms_crypto_key.app_key[0]" "$KMS_CRYPTOKEY_RESOURCE"; then
                     echo -e "${GREEN}✓${NC} Imported KMS crypto key"
                 else
                     echo -e "${RED}✗${NC} Failed to import KMS crypto key"
@@ -1361,22 +1365,27 @@ echo ""
 if [ "$ENABLE_MYSQL" == "true" ] || [[ "$ENABLE_MYSQL" == "y" ]] || [[ "$ENABLE_MYSQL" == "yes" ]]; then
     echo -e "${BOLD}=== MySQL Database Ready ===${NC}"
     MYSQL_HOST=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_host 2>/dev/null || echo "")
+    MYSQL_PORT=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_port 2>/dev/null || echo "")
     MYSQL_USER=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_user 2>/dev/null || echo "")
 
     if [ -n "$MYSQL_HOST" ] && [ -n "$MYSQL_USER" ]; then
         echo "Connection details:"
         echo "  Host: $MYSQL_HOST"
-        echo "  Port: 3306"
+        echo "  Port: ${MYSQL_PORT:-3306}"
         echo "  Database: $MYSQL_DB_NAME"
         echo "  User: $MYSQL_USER"
+        echo "  Public IP (non-standard port for security)"
+        echo ""
+        echo "To connect from Cloud Run:"
+        echo "  Host: $MYSQL_HOST (public IP)"
+        echo "  Port: ${MYSQL_PORT:-3306} (randomized per deployment)"
         echo ""
         echo "To manage your database:"
-        echo "  1. Cloud SQL Proxy (local dev):"
-        echo "     cloud-sql-proxy compute/${PROJECT_ID}/${GCP_REGION}/\$VM_NAME &"
-        echo "     mysql -h 127.0.0.1 -u $MYSQL_USER -p"
+        echo "  1. Connect remotely (from anywhere with password):"
+        echo "     mysql -h $MYSQL_HOST -P ${MYSQL_PORT:-3306} -u $MYSQL_USER -p"
         echo ""
         echo "  2. SSH to VM (bastion access):"
-        echo "     gcloud compute ssh \$VM_NAME --zone=${GCP_REGION}-a"
+        echo "     gcloud compute ssh cilium-mysql-* --zone=${GCP_REGION}-a"
         echo ""
         echo "  3. Database migrations:"
         echo "     ./db/migrate.sh up"
