@@ -748,10 +748,10 @@ export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 # Refresh state before apply to catch resources created outside of Terraform
 # This prevents "already exists" errors on redeploy
 echo -e "${BLUE}→${NC} Refreshing state"
-if ! terraform -chdir="$(dirname "$0")" refresh -auto-approve 2>&1 | grep -E "(Error|failed)" >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} State refreshed"
+if terraform -chdir="$(dirname "$0")" refresh 2>&1 | grep -qE "Error|error"; then
+    echo -e "${YELLOW}⚠${NC} State refresh had issues but continuing"
 else
-    echo -e "${YELLOW}⚠${NC} State refresh had warnings but continuing"
+    echo -e "${GREEN}✓${NC} State refreshed"
 fi
 
 TF_APPLY_SUCCESS=false
