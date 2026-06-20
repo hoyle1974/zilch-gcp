@@ -575,9 +575,12 @@ def _print_summary(config: ZilchConfig) -> None:
         if kms_key:
             outputs["kms_key_id"] = kms_key
 
+        # Get billing info
+        billing_info = gcp.get_billing_info(config.gcp_project_id)
+
         from output import print_deployment_summary
 
-        print_deployment_summary(config.to_dict(), outputs)
+        print_deployment_summary(config.to_dict(), outputs, billing_info)
     except Exception as e:
         warning(f"Could not print summary: {e}")
 

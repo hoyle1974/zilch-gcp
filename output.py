@@ -54,7 +54,7 @@ def progress_done() -> None:
     click.echo(f" {click.style('✓', fg='green')}")
 
 
-def print_deployment_summary(config: dict, outputs: dict) -> None:
+def print_deployment_summary(config: dict, outputs: dict, billing_info: dict = None) -> None:
     """Print deployment completion summary."""
     click.echo()
     click.echo(bold(click.style("Deployment Complete", fg='green')))
@@ -66,6 +66,18 @@ def print_deployment_summary(config: dict, outputs: dict) -> None:
         click.echo(f"  Identity:  {cyan(outputs['service_account_email'])}")
 
     click.echo(f"  Region:    {cyan(config.get('gcp_region', 'us-central1'))}")
+
+    # Show billing info if available
+    if billing_info and 'amount' in billing_info:
+        amount = billing_info['amount']
+        currency = billing_info.get('currency', 'USD')
+        budget = config.get('billing_budget_limit_usd')
+        if budget:
+            budget_float = float(budget) if isinstance(budget, str) else budget
+            percentage = (amount / budget_float * 100) if budget_float > 0 else 0
+            click.echo(f"  Billing:   {yellow(f'${amount:.2f} USD')} / {cyan(f'${budget_float:.2f} USD')} ({percentage:.1f}%)")
+        else:
+            click.echo(f"  Billing:   {yellow(f'${amount:.2f} USD')} (current month)")
     click.echo()
 
     click.echo(bold("Configured Services:"))

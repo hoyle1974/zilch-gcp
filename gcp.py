@@ -378,3 +378,78 @@ def remove_terraform_lock(state_bucket: str, app_name: str) -> bool:
         return result.returncode == 0
     except Exception:
         return False
+
+
+def get_billing_info(project_id: str) -> Optional[dict]:
+    """Get current month-to-date billing for a project.
+
+    Args:
+        project_id: GCP project ID
+
+    Returns:
+        Dict with 'currency', 'amount' keys, or None if unavailable
+    """
+    try:
+        result = subprocess.run(
+            [
+                "gcloud",
+                "billing",
+                "accounts",
+                "list",
+                "--filter",
+                f"linkedProjects.name={project_id}",
+                "--format",
+                "value(name)",
+            ],
+            capture_output=True,
+            timeout=10,
+            check=True,
+            text=True,
+        )
+
+        billing_account = result.stdout.strip()
+        if not billing_account:
+            return None
+
+        # Query current month-to-date spending via billing API
+        result = subprocess.run(
+            [
+                "gcloud",
+                "billing",
+                "accounts",
+                "describe",
+                billing_account,
+                "--format",
+                "value(billingAccountDisplayName,masterBillingAccount)",
+            ],
+            capture_output=True,
+            timeout=10,
+            check=False,
+            text=True,
+        )
+
+        # Try to get spending via Cloud Billing API
+        result = subprocess.run(
+            [
+                "gcloud",
+                "beta",
+                "billing",
+                "accounts",
+                "get-spending-summary",
+                f"--billing-account={billing_account}",
+                "--format=value(amount)",
+            ],
+            capture_output=True,
+            timeout=10,
+            check=False,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            amount = float(result.stdout.strip())
+            return {"currency": "USD", "amount": amount}
+
+        return None
+
+    except Exception:
+        return None
