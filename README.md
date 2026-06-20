@@ -270,25 +270,55 @@ This happens if a deployment was interrupted. Zilch automatically detects and of
 ### Deployment fails with "Already Exists" error
 Zilch automatically detects and imports existing resources. If you see this error, the script should handle recovery automatically. If not, see the manual cleanup section below.
 
-### MySQL Connection Errors
+### MySQL Connection & Health Checks
 
-If your app can't connect to MySQL:
+**Health Check Endpoint:**
 
-1. Verify MySQL is running:
+Your app automatically includes a `/health-check` endpoint that verifies all service connectivity:
+
+```bash
+curl https://your-app.run.app/health-check
+# {
+#   "MySQL Database": {
+#     "status": "online",
+#     "message": "Connected successfully..."
+#   },
+#   ...
+# }
+```
+
+**If MySQL shows "Offline":**
+
+1. Verify MySQL VM is running:
    ```bash
-   gcloud compute instances list | grep mysql
+   gcloud compute instances list --filter="name:mysql"
    ```
 
-2. Check Cloud SQL Proxy logs in Cloud Run:
+2. Check startup script logs:
    ```bash
-   gcloud run logs read YOUR_APP_NAME --limit=50
+   gcloud compute ssh zilch-mysql-vm-e556 --zone=us-central1-a
+   tail -50 /var/log/zilch-mysql-startup.log
    ```
 
-3. Test direct connection:
+3. Verify Docker container is running:
    ```bash
-   cloud-sql-proxy compute/PROJECT_ID/REGION/zilch-mysql-vm &
-   mysql -h 127.0.0.1 -u zilch_user -p
+   gcloud compute ssh zilch-mysql-vm-e556 --zone=us-central1-a
+   sudo docker ps | grep mysql
    ```
+
+4. Test connection to public IP:
+   ```bash
+   # Get the public IP and port from outputs
+   terraform output zilch_mysql_host
+   terraform output zilch_mysql_port
+   
+   # Test connectivity
+   mysql -h $(terraform output -raw zilch_mysql_host) \
+         -P $(terraform output -raw zilch_mysql_port) \
+         -u zilch_user -p
+   ```
+
+**Security Note:** MySQL password is securely injected by Cloud Run from Secret Manager at runtime and is not exposed in environment variables or Terraform state.
 
 ### Manual Resource Cleanup
 
