@@ -69,6 +69,48 @@ class TerraformExecutor:
                         f"Terraform init failed"
                     )
 
+    def plan(self, vars_dict: Dict[str, str]) -> None:
+        """Plan Terraform changes (dry-run).
+
+        Args:
+            vars_dict: Dictionary of Terraform variables
+
+        Raises:
+            TerraformError: If plan fails
+        """
+        info("Planning infrastructure changes")
+
+        # Build variable arguments
+        var_args = []
+        for key, value in vars_dict.items():
+            if isinstance(value, bool):
+                var_args.append(f'-var={key}={str(value).lower()}')
+            else:
+                var_args.append(f'-var={key}={value}')
+
+        cmd = [
+            "terraform",
+            "-chdir=" + str(self.working_dir),
+            "plan",
+        ] + var_args
+
+        # Set quota project for billing API
+        env = os.environ.copy()
+        if 'gcp_project_id' in vars_dict:
+            env['GOOGLE_CLOUD_QUOTA_PROJECT'] = vars_dict['gcp_project_id']
+
+        try:
+            result = subprocess.run(
+                cmd,
+                timeout=600,  # 10 minutes
+                check=True,
+                cwd=str(self.working_dir),
+                env=env,
+            )
+            success("Plan completed (no changes applied)")
+        except subprocess.CalledProcessError as e:
+            raise TerraformError(f"Terraform plan failed")
+
     def apply(self, vars_dict: Dict[str, str]) -> None:
         """Apply Terraform configuration.
 

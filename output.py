@@ -33,10 +33,25 @@ def cyan(msg: str) -> str:
     return click.style(msg, fg='cyan')
 
 
+def yellow(msg: str) -> str:
+    """Return yellow text."""
+    return click.style(msg, fg='yellow')
+
+
 def section(title: str) -> None:
-    """Print a section header."""
+    """Print a section header with divider."""
     click.echo()
-    click.echo(bold(title))
+    click.echo(bold(f"━━━ {title} ━━━"))
+
+
+def show_progress(msg: str) -> None:
+    """Print a progress indicator (doesn't add newline)."""
+    click.echo(f"{info(msg)}", nl=False)
+
+
+def progress_done() -> None:
+    """Complete a progress indicator line."""
+    click.echo(f" {click.style('✓', fg='green')}")
 
 
 def print_deployment_summary(config: dict, outputs: dict) -> None:

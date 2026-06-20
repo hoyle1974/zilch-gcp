@@ -24,7 +24,9 @@ def main():
 
 @main.command()
 @click.option("--auto", is_flag=True, help="Use config defaults, skip prompts")
-def deploy(auto: bool) -> None:
+@click.option("--dry-run", "--preview", is_flag=True, help="Preview changes without applying")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed output")
+def deploy(auto: bool, dry_run: bool, verbose: bool) -> None:
     """Deploy infrastructure.
 
     Deploys Zilch infrastructure to GCP including Cloud Run, databases,
@@ -32,10 +34,16 @@ def deploy(auto: bool) -> None:
     """
     try:
         section("Zilch GCP Infrastructure Deployment")
-        if auto:
+        if dry_run:
+            click.echo(cyan("(dry-run mode - no changes will be made)"))
+        elif auto:
             click.echo(cyan("(auto mode - using config defaults)"))
 
         section("Prerequisites")
+
+        # Check if running in Cloud Shell
+        if gcp.is_cloud_shell():
+            success("Running in Google Cloud Shell")
 
         # Check tools
         gcp.check_required_tools()
@@ -143,15 +151,19 @@ def deploy(auto: bool) -> None:
         _setup_gcp(config)
 
         # Terraform
-        _run_terraform(config)
+        _run_terraform(config, dry_run=dry_run)
 
-        # Health checks
-        _run_health_checks(config)
+        # Health checks and summary (skip in dry-run mode)
+        if not dry_run:
+            # Health checks
+            _run_health_checks(config)
 
-        # Print summary
-        _print_summary(config)
+            # Print summary
+            _print_summary(config)
 
-        success(bold("Deployment complete!"))
+            success(bold("Deployment complete!"))
+        else:
+            success(bold("Plan completed successfully!"))
 
     except KeyboardInterrupt:
         warning("Deployment cancelled")
@@ -433,8 +445,13 @@ def _setup_gcp(config: ZilchConfig) -> None:
             sys.exit(1)
 
 
-def _run_terraform(config: ZilchConfig) -> None:
-    """Run Terraform deployment."""
+def _run_terraform(config: ZilchConfig, dry_run: bool = False) -> None:
+    """Run Terraform deployment.
+
+    Args:
+        config: Zilch configuration
+        dry_run: If True, run terraform plan instead of apply
+    """
     section("Terraform")
 
     state_bucket = f"{config.gcp_project_id}-zilch-tfstate"
@@ -450,8 +467,11 @@ def _run_terraform(config: ZilchConfig) -> None:
         # State reconciliation (import existing resources)
         _reconcile_state(tf, config)
 
-        # Apply
-        tf.apply(config.to_terraform_vars())
+        # Plan or Apply
+        if dry_run:
+            tf.plan(config.to_terraform_vars())
+        else:
+            tf.apply(config.to_terraform_vars())
 
     except TerraformError as e:
         error(str(e))

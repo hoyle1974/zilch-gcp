@@ -1,5 +1,6 @@
 """GCP validation and operations."""
 
+import os
 import subprocess
 from typing import Optional
 
@@ -10,6 +11,15 @@ class GCPError(Exception):
     """GCP operation error."""
 
     pass
+
+
+def is_cloud_shell() -> bool:
+    """Check if running in Google Cloud Shell.
+
+    Returns:
+        True if running in Cloud Shell, False otherwise
+    """
+    return "CLOUD_SHELL" in os.environ
 
 
 def check_required_tools() -> None:
