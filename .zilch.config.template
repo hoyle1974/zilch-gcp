@@ -1,0 +1,158 @@
+# Zilch Reference App Configuration Template
+# Uncomment and set values to configure your deployment
+# See deploy.sh for usage instructions
+
+# ────────────────────────────────────────────────────────────────────────────
+# PROJECT SETTINGS
+# ────────────────────────────────────────────────────────────────────────────
+
+# GCP project identifier (required)
+# Format: lowercase letters, numbers, hyphens only
+# gcp_project_id=my-gcp-project
+
+# Application name used for naming all resources (required)
+# Format: lowercase letters, numbers, hyphens only (3-30 chars)
+# app_name=my-app
+
+# GCP region for resource deployment
+# Options: us-central1 (Iowa), us-east1 (South Carolina), us-west1 (Oregon)
+# gcp_region=us-central1
+
+# ────────────────────────────────────────────────────────────────────────────
+# GITHUB INTEGRATION (required for Cloud Build)
+# ────────────────────────────────────────────────────────────────────────────
+
+# GitHub username or organization name
+# github_owner=your-github-username
+
+# GitHub repository name
+# github_repo=your-repo-name
+
+# ────────────────────────────────────────────────────────────────────────────
+# PHASE 1: DATA & STORAGE SERVICES (Optional)
+# ────────────────────────────────────────────────────────────────────────────
+
+# Firestore NoSQL Database
+# Use for: Document storage, real-time sync, mobile app backends
+# Cost: Pay per read/write/delete operation, free tier included
+# enable_firestore=false
+
+# Cloud Storage
+# Use for: User uploads, files, media, large object storage
+# Cost: Pay per GB stored + access operations
+# enable_cloud_storage=false
+
+# Secret Manager
+# Use for: API keys, database passwords, sensitive configuration
+# Cost: Free for first 6 secrets, $0.06/month per additional secret
+# enable_secret_manager=false
+
+# Firebase Authentication
+# Use for: User login, social auth, phone auth
+# Cost: Free for first 50k users/month
+# enable_firebase_auth=false
+
+# ────────────────────────────────────────────────────────────────────────────
+# PHASE 2: BUILD & DEPLOYMENT (Optional)
+# ────────────────────────────────────────────────────────────────────────────
+
+# Cloud Build
+# Use for: CI/CD, automated deployments from GitHub
+# Cost: First 120 minutes/day free, then $0.003/minute
+# enable_cloud_build=true
+
+# ────────────────────────────────────────────────────────────────────────────
+# PHASE 3: ADVANCED SERVICES (Optional)
+# ────────────────────────────────────────────────────────────────────────────
+
+# Vertex AI
+# Use for: Machine learning, predictions, training models
+# Cost: Pay per model training/prediction (100+ options available)
+# enable_vertex_ai=false
+
+# Pub/Sub
+# Use for: Event streaming, async messaging, decoupled services
+# Cost: Free tier for first 10GB/month, then $0.04/GB
+# enable_pubsub=false
+
+# Cloud Tasks
+# Use for: Distributed task queues, scheduled work
+# Cost: Free for first 1M tasks/month, then $0.40/million
+# enable_cloud_tasks=false
+
+# BigQuery
+# Use for: Data warehouse, analytics, SQL queries on large datasets
+# Cost: Free tier (1TB/month), then $6.25/TB
+# enable_bigquery=false
+
+# Cloud KMS
+# Use for: Encryption key management, data protection
+# Cost: $6/month per key version
+# enable_cloud_kms=false
+
+# Vision AI
+# Use for: Image recognition, OCR, object detection
+# Cost: $1.50 per 1000 requests (most operations)
+# enable_vision_ai=false
+
+# Speech-to-Text
+# Use for: Audio to text conversion, transcription
+# Cost: $0.024 per 15 seconds of audio
+# enable_speech_to_text=false
+
+# Translation
+# Use for: Text translation across 100+ languages
+# Cost: $15 per 1 million characters
+# enable_translation=false
+
+# ────────────────────────────────────────────────────────────────────────────
+# PHASE 4: SCHEDULING & MONITORING (Optional)
+# ────────────────────────────────────────────────────────────────────────────
+
+# Cloud Scheduler
+# Use for: Cron jobs, periodic tasks, scheduled functions
+# Cost: $0.10 per job per month
+# enable_scheduler=false
+
+# Cron schedule expression (only if scheduler enabled)
+# Format: standard cron (minute hour day month weekday)
+# scheduler_schedule=0 0 * * *
+
+# Timezone for scheduler (IANA timezone)
+# scheduler_timezone=UTC
+
+# HTTP endpoint to call on schedule
+# scheduler_endpoint=/api/cron
+
+# Cloud Monitoring
+# Use for: Alerts, budgets, dashboards, log monitoring
+# Cost: Free tier included
+# enable_monitoring=false
+
+# Monthly billing budget alert threshold (USD)
+# billing_budget_limit_usd=10
+
+# GCP Billing Account ID (required if monitoring enabled)
+# Format: XXXXXX-XXXXXX-XXXXXX
+# Leave empty to select interactively during deployment
+# gcp_billing_account_id=
+
+# ────────────────────────────────────────────────────────────────────────────
+# PHASE 5: DATABASE (Optional)
+# ────────────────────────────────────────────────────────────────────────────
+
+# MySQL Database on Compute Engine
+# Use for: Relational data, complex queries, traditional SQL
+# Cost: ~$1.26/month (compute free tier + storage)
+# enable_mysql=false
+
+# MySQL database name to create
+# mysql_database_name=zilch_app
+
+# ────────────────────────────────────────────────────────────────────────────
+# CLOUD RUN ACCESS CONTROL
+# ────────────────────────────────────────────────────────────────────────────
+
+# Allow unauthenticated access to Cloud Run service
+# Set to true for public APIs, false for authenticated only
+# allow_unauthenticated_access=true

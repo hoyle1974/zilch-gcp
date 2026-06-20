@@ -10,20 +10,233 @@ CYAN=$'\033[0;36m'
 BOLD=$'\033[1m'
 NC=$'\033[0m'
 
-# Check for --auto flag to skip all prompts
+# Parse command line arguments
 AUTO_MODE=false
-if [ "$1" = "--auto" ]; then
-    AUTO_MODE=true
-fi
+DRY_RUN=false
+VERBOSE=false
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --auto)
+            AUTO_MODE=true
+            ;;
+        --dry-run|--preview)
+            DRY_RUN=true
+            AUTO_MODE=true
+            ;;
+        --verbose|-v)
+            VERBOSE=true
+            ;;
+        --help|-h)
+            cat << 'HELP'
+Zilch GCP Infrastructure Deployment
+
+Usage:
+  ./deploy.sh              Interactive mode - prompts for all settings
+  ./deploy.sh --auto       Non-interactive mode - uses .zilch.config defaults
+  ./deploy.sh --dry-run    Preview what would be deployed (no changes)
+  ./deploy.sh --verbose    Show detailed output during deployment
+  ./deploy.sh --help       Show this message
+
+Examples:
+  First time setup:
+    ./deploy.sh
+
+  Redeployment with saved config:
+    ./deploy.sh --auto
+
+  Preview changes before deploying:
+    ./deploy.sh --dry-run
+
+For more help, see: https://github.com/zilch-ai/reference-app
+HELP
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Progress indicator helper
+show_progress() {
+    local msg=$1
+    echo -ne "${BLUE}→${NC} $msg"
+}
+
+progress_done() {
+    echo -e " ${GREEN}✓${NC}"
+}
+
+progress_fail() {
+    local msg=$1
+    echo -e " ${RED}✗${NC}"
+    [ -n "$msg" ] && echo -e "  ${RED}$msg${NC}"
+}
+
+# Section header helper
+section() {
+    echo ""
+    echo -e "${BOLD}━━━ $1 ━━━${NC}"
+}
 
 clear
 echo -e "${BOLD}${CYAN}Zilch GCP Infrastructure Deployment${NC}"
-if [ "$AUTO_MODE" = true ]; then
+if [ "$DRY_RUN" = true ]; then
+    echo -e "${YELLOW}(dry-run mode - no changes will be made)${NC}"
+elif [ "$AUTO_MODE" = true ]; then
     echo -e "${BLUE}(auto mode - using defaults)${NC}"
 fi
 echo ""
 
-echo -e "${BOLD}Prerequisites${NC}"
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+prompt_toggle() {
+    local feature_name=$1
+    local current_value=$2
+    local default_response="n"
+    local status_display=""
+
+    if [ "$current_value" = "true" ]; then
+        default_response="y"
+        status_display=" ${GREEN}[enabled]${NC}"
+    else
+        status_display=" ${CYAN}[disabled]${NC}"
+    fi
+
+    if [ "$AUTO_MODE" = false ]; then
+        read -p "${BLUE}  ${feature_name}?${NC}${status_display} ${CYAN}[y/n]${NC} " choice
+        choice="${choice:-$default_response}"
+    else
+        choice="$default_response"
+    fi
+
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+confirm_gcp_action() {
+    local action=$1
+    local default_response="y"
+
+    if [ "$AUTO_MODE" = true ]; then
+        return 0
+    fi
+
+    read -p "${CYAN}${action}${NC} ${BLUE}[Y/n]${NC}: " choice
+    choice="${choice:-$default_response}"
+
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+        return 0
+    else
+        echo -e "${YELLOW}⚠${NC} Skipped. Cannot continue without this step."
+        exit 1
+    fi
+}
+
+check_firestore_permissions() {
+    local project=$1
+    local current_user=$(gcloud config get-value account 2>/dev/null)
+
+    if gcloud projects get-iam-policy "$project" \
+        --flatten="bindings[].members" \
+        --filter="bindings.role:datastore.admin" \
+        --format="value(bindings.members)" 2>/dev/null | grep -q "user:$current_user"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+setup_firestore_permissions() {
+    local project=$1
+    local current_user=$(gcloud config get-value account 2>/dev/null)
+
+    echo ""
+    echo -e "${YELLOW}⚠${NC}  ${BOLD}Firestore Admin role required${NC}"
+    echo ""
+    echo "Your account (${CYAN}${current_user}${NC}) does not have Firestore Admin role."
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo ""
+    echo "  1. ${BOLD}Self-grant role${NC} (if you have permissions):"
+    echo -e "     ${CYAN}gcloud projects add-iam-policy-binding $project \\"
+    echo "       --member=user:$current_user \\"
+    echo "       --role=roles/datastore.admin${NC}"
+    echo ""
+    echo "  2. ${BOLD}Request from GCP admin${NC}:"
+    echo -e "     Send them this command to run:"
+    echo -e "     ${CYAN}gcloud projects add-iam-policy-binding $project \\"
+    echo "       --member=user:$current_user \\"
+    echo "       --role=roles/datastore.admin${NC}"
+    echo ""
+    echo "  3. ${BOLD}Check in Cloud Console${NC}:"
+    echo -e "     ${CYAN}https://console.cloud.google.com/iam-admin/iam?project=$project${NC}"
+    echo ""
+
+    read -p "Try to grant yourself the role? ${BLUE}[y/n]${NC}: " choice
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+        if gcloud projects add-iam-policy-binding "$project" \
+            --member="user:$current_user" \
+            --role="roles/datastore.admin" \
+            --quiet 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Firestore Admin role granted"
+            return 0
+        else
+            echo -e "${RED}✗${NC} Failed to grant role (you may not have permissions to modify IAM)"
+            echo -e "   ${YELLOW}Contact your GCP admin and ask them to grant you: roles/datastore.admin${NC}"
+            return 1
+        fi
+    fi
+    return 1
+}
+
+build_tf_vars() {
+    # Build consistent Terraform variable string
+    echo "-var=gcp_project_id=${PROJECT_ID} \
+-var=app_name=${APP_NAME} \
+-var=gcp_region=${GCP_REGION} \
+-var=github_owner=${GITHUB_OWNER:-} \
+-var=github_repo=${GITHUB_REPO:-} \
+-var=enable_cloud_build=${ENABLE_CLOUD_BUILD} \
+-var=enable_firestore=${ENABLE_FIRESTORE} \
+-var=enable_secret_manager=${ENABLE_SECRET_MANAGER} \
+-var=enable_cloud_storage=${ENABLE_CLOUD_STORAGE} \
+-var=enable_firebase_auth=${ENABLE_FIREBASE_AUTH} \
+-var=enable_vertex_ai=${ENABLE_VERTEX_AI} \
+-var=enable_pubsub=${ENABLE_PUBSUB} \
+-var=enable_cloud_tasks=${ENABLE_CLOUD_TASKS} \
+-var=enable_bigquery=${ENABLE_BIGQUERY} \
+-var=enable_cloud_kms=${ENABLE_CLOUD_KMS} \
+-var=enable_vision_ai=${ENABLE_VISION_AI} \
+-var=enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT} \
+-var=enable_translation=${ENABLE_TRANSLATION} \
+-var=enable_scheduler=${ENABLE_SCHEDULER} \
+-var=scheduler_schedule=${SCHEDULER_SCHEDULE} \
+-var=scheduler_timezone=${SCHEDULER_TIMEZONE} \
+-var=scheduler_endpoint=${SCHEDULER_ENDPOINT} \
+-var=enable_monitoring=${ENABLE_MONITORING} \
+-var=billing_account_name=${BILLING_ACCOUNT_NAME} \
+-var=billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD} \
+-var=enable_mysql=${ENABLE_MYSQL} \
+-var=mysql_database_name=${MYSQL_DB_NAME} \
+-var=allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS} \
+-var=gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}"
+}
+
+# ============================================================================
+# Prerequisites Check
+# ============================================================================
+
+section "Prerequisites"
 
 # Check if running in Google Cloud Shell (has all tools pre-installed)
 if [ -z "$CLOUD_SHELL" ]; then
@@ -102,6 +315,21 @@ ALLOW_UNAUTHENTICATED_ACCESS="true"
 GCP_BILLING_ACCOUNT_ID=""
 GITHUB_OWNER=""
 GITHUB_REPO=""
+
+# Create config from template on first run if it doesn't exist
+if [ ! -f ".zilch.config" ]; then
+    if [ -f ".zilch.config.template" ]; then
+        echo -e "${BLUE}→${NC} Creating ${CYAN}.zilch.config${NC} from template"
+        cp .zilch.config.template .zilch.config
+        echo -e "${GREEN}✓${NC} Template copied"
+        echo -e "${CYAN}→${NC} Edit .zilch.config and uncomment settings, then re-run deploy.sh"
+        echo ""
+    else
+        echo -e "${YELLOW}⚠${NC} No .zilch.config or template found"
+        echo -e "   Run from the deploy.sh directory or copy .zilch.config.template"
+        exit 1
+    fi
+fi
 
 # Load from .zilch.config if it exists (uses lowercase variable names)
 if [ -f ".zilch.config" ]; then
@@ -185,11 +413,16 @@ fi
 
 if ! gcloud projects describe "$PROJECT_ID" &>/dev/null; then
     echo -e "${RED}✗ Project ${CYAN}${PROJECT_ID}${RED} not found or no access${NC}"
+    echo ""
+    echo "Make sure:"
+    echo "  • The project ID is correct"
+    echo "  • You have access to the project"
+    echo "  • You can list your projects with: ${CYAN}gcloud projects list${NC}"
     exit 1
 fi
 echo -e "${GREEN}✓${NC} Project ${CYAN}${PROJECT_ID}${NC}"
 
-echo -e "${BOLD}Verification${NC}"
+section "Verification"
 ROLE_CHECK=$(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten="bindings[].members" \
   --filter="bindings.members:user:${CURRENT_USER} AND (bindings.role:roles/editor OR bindings.role:roles/owner)" \
@@ -223,7 +456,7 @@ if [ "$ENABLE_FIRESTORE" = "true" ]; then
 fi
 echo ""
 echo ""
-echo -e "${BOLD}Configuration${NC}"
+section "Configuration"
 DEFAULT_APP_NAME="${APP_NAME:-zilch-app}"
 if [ "$AUTO_MODE" = false ]; then
     read -p "${BLUE}App Name${NC} ${CYAN}[${DEFAULT_APP_NAME}]${NC}: " INPUT_APP_NAME
@@ -233,41 +466,43 @@ else
 fi
 
 if [[ ! "$APP_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
-    echo -e "${RED}✗ Invalid app name (3-30 lowercase/numbers/hyphens)${NC}"
+    echo -e "${RED}✗ Invalid app name${NC}"
+    echo ""
+    echo "App names must:"
+    echo "  • Be 3-30 characters long"
+    echo "  • Contain only lowercase letters, numbers, and hyphens"
+    echo "  • Not start or end with a hyphen"
+    echo ""
+    echo "Examples: my-app, zilch-prod, app123"
     exit 1
 fi
 
-echo ""
-echo -e "${BOLD}Region${NC}"
+section "Region Selection"
 
-# Show current region as default
-REGION_DEFAULT="1"
-if [ "$GCP_REGION" = "us-east1" ]; then
-    REGION_DEFAULT="2"
-elif [ "$GCP_REGION" = "us-west1" ]; then
-    REGION_DEFAULT="3"
-fi
+# Simplified region selection
+regions=("us-central1:Iowa" "us-east1:South Carolina" "us-west1:Oregon")
+region_default=1
+for i in "${!regions[@]}"; do
+    if [[ "${regions[$i]}" == "${GCP_REGION}:"* ]]; then
+        region_default=$((i + 1))
+        break
+    fi
+done
 
 if [ "$AUTO_MODE" = false ]; then
-    if [ "$GCP_REGION" = "us-east1" ]; then
-        echo "  [1] us-central1 (Iowa)"
-        echo -e "  ${CYAN}[2] us-east1    (South Carolina) ← current${NC}"
-        echo "  [3] us-west1    (Oregon)"
-    elif [ "$GCP_REGION" = "us-west1" ]; then
-        echo "  [1] us-central1 (Iowa)"
-        echo "  [2] us-east1    (South Carolina)"
-        echo -e "  ${CYAN}[3] us-west1    (Oregon) ← current${NC}"
-    else
-        echo -e "  ${CYAN}[1] us-central1 (Iowa) ← current${NC}"
-        echo "  [2] us-east1    (South Carolina)"
-        echo "  [3] us-west1    (Oregon)"
-    fi
-    read -p "${BLUE}Select${NC} ${CYAN}[1-3, default: ${REGION_DEFAULT}]${NC}: " REGION_CHOICE
-    REGION_CHOICE="${REGION_CHOICE:-$REGION_DEFAULT}"
+    for i in "${!regions[@]}"; do
+        IFS=':' read -r region_code region_name <<< "${regions[$i]}"
+        marker=""
+        [ $((i + 1)) -eq $region_default ] && marker=" ${CYAN}← current${NC}"
+        printf "  [%d] %-15s %s%s\n" $((i + 1)) "$region_code" "($region_name)" "$marker"
+    done
+    read -p "${BLUE}Select${NC} ${CYAN}[1-3, default: ${region_default}]${NC}: " REGION_CHOICE
+    REGION_CHOICE="${REGION_CHOICE:-$region_default}"
 else
-    REGION_CHOICE="$REGION_DEFAULT"
+    REGION_CHOICE="$region_default"
 fi
 
+# Set region based on choice
 case "$REGION_CHOICE" in
     2) GCP_REGION="us-east1" ;;
     3) GCP_REGION="us-west1" ;;
@@ -299,6 +534,89 @@ prompt_toggle() {
     else
         echo "false"
     fi
+}
+
+interactive_service_menu() {
+    # Numbered menu for service selection - simple and reliable
+    local services_list=(
+        "Firestore|ENABLE_FIRESTORE|NoSQL Database: document storage, real-time sync"
+        "Cloud Storage|ENABLE_CLOUD_STORAGE|File Storage: user uploads, media, large files"
+        "Secret Manager|ENABLE_SECRET_MANAGER|Secrets: API keys, passwords, config"
+        "Firebase Auth|ENABLE_FIREBASE_AUTH|Authentication: user login, social auth"
+        "Vertex AI|ENABLE_VERTEX_AI|Machine Learning: predictions, model training"
+        "Cloud Build|ENABLE_CLOUD_BUILD|CI/CD: auto-deploy from GitHub"
+        "Pub/Sub|ENABLE_PUBSUB|Event Streaming: async messaging, events"
+        "Cloud Tasks|ENABLE_CLOUD_TASKS|Task Queue: distributed work, retries"
+        "BigQuery|ENABLE_BIGQUERY|Data Warehouse: SQL on big data"
+        "Cloud KMS|ENABLE_CLOUD_KMS|Encryption Keys: key management, data protection"
+        "Vision AI|ENABLE_VISION_AI|Image Recognition: OCR, object detection"
+        "Speech-to-Text|ENABLE_SPEECH_TO_TEXT|Audio: speech recognition, transcription"
+        "Translation|ENABLE_TRANSLATION|Languages: multi-language text translation"
+        "Cloud Scheduler|ENABLE_SCHEDULER|Cron Jobs: periodic tasks, schedules"
+        "Cloud Monitoring|ENABLE_MONITORING|Monitoring: alerts, budgets, log monitoring"
+        "MySQL Database|ENABLE_MYSQL|Relational DB: SQL, complex queries"
+    )
+
+    echo ""
+    echo -e "${BOLD}Services Configuration${NC}"
+    echo "Toggle each service on/off:"
+    echo ""
+
+    # Display menu with current state
+    for i in "${!services_list[@]}"; do
+        IFS='|' read -r name var desc <<< "${services_list[$i]}"
+        eval current=\${$var}
+        local checkbox="[-]"
+        [ "$current" = "true" ] && checkbox="[X]"
+        printf "  %2d. $checkbox %-25s %s\n" $((i+1)) "$name" "$([ "$current" = "true" ] && echo "ENABLED" || echo "disabled")"
+    done
+
+    echo ""
+    echo "Enter service number to toggle (or press Enter to continue):"
+    echo ""
+
+    while true; do
+        read -p "> " choice
+
+        # Empty input = continue
+        if [ -z "$choice" ]; then
+            break
+        fi
+
+        # Validate input is a number between 1 and 16
+        if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt 16 ]; then
+            echo "Invalid choice. Enter 1-16 or press Enter to continue."
+            continue
+        fi
+
+        # Toggle the selected service
+        idx=$((choice - 1))
+        IFS='|' read -r name var desc <<< "${services_list[$idx]}"
+        eval current=\${$var}
+
+        if [ "$current" = "true" ]; then
+            eval $var=false
+        else
+            eval $var=true
+        fi
+
+        # Show updated state
+        eval new_state=\${$var}
+        local checkbox="[-]"
+        [ "$new_state" = "true" ] && checkbox="[X]"
+        echo -e "  $checkbox $name now $([ "$new_state" = "true" ] && echo -e "${GREEN}ENABLED${NC}" || echo -e "${YELLOW}disabled${NC}")"
+        echo ""
+    done
+
+    # Show summary
+    echo ""
+    echo -e "${BOLD}Selected Services:${NC}"
+    for i in "${!services_list[@]}"; do
+        IFS='|' read -r name var desc <<< "${services_list[$i]}"
+        eval state=\${$var}
+        [ "$state" = "true" ] && echo -e "  ${GREEN}✓${NC} $name"
+    done
+    echo ""
 }
 
 confirm_gcp_action() {
@@ -379,13 +697,16 @@ setup_firestore_permissions() {
     return 1
 }
 
-echo ""
-echo -e "${BOLD}Services${NC}"
-ENABLE_FIRESTORE=$(prompt_toggle "Firestore" "$ENABLE_FIRESTORE")
+section "Services"
 
+if [ "$AUTO_MODE" = false ]; then
+    interactive_service_menu
+else
+    echo -e "${BLUE}→${NC} Using service settings from config (auto mode)"
+fi
+
+# Check Firestore permissions if enabled
 if [ "$ENABLE_FIRESTORE" == "true" ]; then
-    # Check if user has Firestore Admin permissions
-    # (Run even in AUTO_MODE to fail fast before Terraform)
     if ! check_firestore_permissions "$PROJECT_ID"; then
         if [ "$AUTO_MODE" = false ]; then
             if ! setup_firestore_permissions "$PROJECT_ID"; then
@@ -400,20 +721,6 @@ if [ "$ENABLE_FIRESTORE" == "true" ]; then
         echo -e "${GREEN}✓${NC} Firestore Admin role confirmed"
     fi
 fi
-
-ENABLE_SECRET_MANAGER=$(prompt_toggle "Secret Manager" "$ENABLE_SECRET_MANAGER")
-ENABLE_CLOUD_STORAGE=$(prompt_toggle "Cloud Storage" "$ENABLE_CLOUD_STORAGE")
-ENABLE_CLOUD_BUILD=$(prompt_toggle "Cloud Build" "$ENABLE_CLOUD_BUILD")
-ENABLE_FIREBASE_AUTH=$(prompt_toggle "Firebase Auth" "$ENABLE_FIREBASE_AUTH")
-ENABLE_VERTEX_AI=$(prompt_toggle "Vertex AI" "$ENABLE_VERTEX_AI")
-ENABLE_PUBSUB=$(prompt_toggle "Pub/Sub" "$ENABLE_PUBSUB")
-ENABLE_CLOUD_TASKS=$(prompt_toggle "Cloud Tasks" "$ENABLE_CLOUD_TASKS")
-ENABLE_BIGQUERY=$(prompt_toggle "BigQuery" "$ENABLE_BIGQUERY")
-ENABLE_CLOUD_KMS=$(prompt_toggle "Cloud KMS" "$ENABLE_CLOUD_KMS")
-ENABLE_VISION_AI=$(prompt_toggle "Vision AI" "$ENABLE_VISION_AI")
-ENABLE_SPEECH_TO_TEXT=$(prompt_toggle "Speech-to-Text" "$ENABLE_SPEECH_TO_TEXT")
-ENABLE_TRANSLATION=$(prompt_toggle "Translation" "$ENABLE_TRANSLATION")
-ENABLE_SCHEDULER=$(prompt_toggle "Cloud Scheduler" "$ENABLE_SCHEDULER")
 
 # MySQL Database (NEW)
 echo ""
@@ -570,8 +877,7 @@ if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     fi
 fi
 
-echo ""
-echo -e "${BOLD}Saving Configuration${NC}"
+section "Saving Configuration"
 cat > .zilch.config << CONFIGEOF
 # Zilch Reference App Configuration
 # This app demonstrates all Zilch Phase 1 + Phase 2 + Phase 3 + Phase 4 services
@@ -625,8 +931,7 @@ CONFIGEOF
 echo -e "${GREEN}✓${NC} Saved"
 
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
-echo ""
-echo -e "${BOLD}Infrastructure Setup${NC}"
+section "Infrastructure Setup"
 echo -e "${BLUE}→${NC} State bucket ${CYAN}${STATE_BUCKET}${NC}"
 
 # Always attempt to create the bucket (idempotent: succeeds if exists, fails only on real errors)
@@ -716,8 +1021,7 @@ if [ "$BUCKET_CREATED" = true ]; then
     sleep 3
 fi
 
-echo ""
-echo -e "${BOLD}Terraform${NC}"
+section "Terraform Planning & Deployment"
 
 # Check for and handle stale Terraform state locks
 handle_terraform_lock() {
@@ -796,7 +1100,7 @@ if [ "$API_READY" = false ]; then
     echo -e "${YELLOW}⚠${NC} Cloud Resource Manager API may still be initializing, continuing anyway..."
 fi
 
-echo -e "${BLUE}→${NC} Initializing"
+show_progress "Initializing Terraform"
 TF_INIT_SUCCESS=false
 TF_INIT_RETRIES=0
 TF_MAX_RETRIES=3
@@ -805,30 +1109,61 @@ while [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; do
     if terraform -chdir="$(dirname "$0")" init \
         -backend-config="bucket=${STATE_BUCKET}" \
         -backend-config="prefix=terraform/state/${APP_NAME}" \
-        -reconfigure 2>&1; then
+        -reconfigure 2>&1 >/dev/null; then
         TF_INIT_SUCCESS=true
         break
     fi
     TF_INIT_RETRIES=$((TF_INIT_RETRIES+1))
     if [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; then
-        echo "Init failed, retrying ($TF_INIT_RETRIES/$TF_MAX_RETRIES)..."
+        echo -ne " ${YELLOW}retrying $TF_INIT_RETRIES/$TF_MAX_RETRIES${NC}"
         sleep 2
     fi
 done
 
 if [ "$TF_INIT_SUCCESS" = false ]; then
-    echo -e "${RED}✗ Terraform init failed${NC}"
+    progress_fail "Terraform init failed"
     exit 1
 fi
-echo -e "${GREEN}✓${NC} Init complete"
+progress_done
 
 # State Reconciliation: Check for pre-existing resources and import if needed
-echo ""
-echo -e "${BOLD}State Reconciliation${NC}"
+section "State Reconciliation"
 
 is_in_terraform_state() {
     local resource_path=$1
     terraform -chdir="$(dirname "$0")" state list "$resource_path" &>/dev/null
+}
+
+build_tf_vars() {
+    echo "-var=gcp_project_id=${PROJECT_ID} \
+-var=app_name=${APP_NAME} \
+-var=gcp_region=${GCP_REGION} \
+-var=github_owner=${GITHUB_OWNER:-} \
+-var=github_repo=${GITHUB_REPO:-} \
+-var=enable_cloud_build=${ENABLE_CLOUD_BUILD} \
+-var=enable_firestore=${ENABLE_FIRESTORE} \
+-var=enable_secret_manager=${ENABLE_SECRET_MANAGER} \
+-var=enable_cloud_storage=${ENABLE_CLOUD_STORAGE} \
+-var=enable_firebase_auth=${ENABLE_FIREBASE_AUTH} \
+-var=enable_vertex_ai=${ENABLE_VERTEX_AI} \
+-var=enable_pubsub=${ENABLE_PUBSUB} \
+-var=enable_cloud_tasks=${ENABLE_CLOUD_TASKS} \
+-var=enable_bigquery=${ENABLE_BIGQUERY} \
+-var=enable_cloud_kms=${ENABLE_CLOUD_KMS} \
+-var=enable_vision_ai=${ENABLE_VISION_AI} \
+-var=enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT} \
+-var=enable_translation=${ENABLE_TRANSLATION} \
+-var=enable_scheduler=${ENABLE_SCHEDULER} \
+-var=scheduler_schedule=${SCHEDULER_SCHEDULE} \
+-var=scheduler_timezone=${SCHEDULER_TIMEZONE} \
+-var=scheduler_endpoint=${SCHEDULER_ENDPOINT} \
+-var=enable_monitoring=${ENABLE_MONITORING} \
+-var=billing_account_name=${BILLING_ACCOUNT_NAME} \
+-var=billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD} \
+-var=enable_mysql=${ENABLE_MYSQL} \
+-var=mysql_database_name=${MYSQL_DB_NAME} \
+-var=allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS} \
+-var=gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}"
 }
 
 import_resource() {
@@ -837,42 +1172,12 @@ import_resource() {
     local output
 
     output=$(terraform -chdir="$(dirname "$0")" import \
-      -var="gcp_project_id=${PROJECT_ID}" \
-      -var="app_name=${APP_NAME}" \
-      -var="gcp_region=${GCP_REGION}" \
-      -var="github_owner=${GITHUB_OWNER:-}" \
-      -var="github_repo=${GITHUB_REPO:-}" \
-      -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
-      -var="enable_firestore=${ENABLE_FIRESTORE}" \
-      -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
-      -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
-      -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
-      -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
-      -var="enable_pubsub=${ENABLE_PUBSUB}" \
-      -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
-      -var="enable_bigquery=${ENABLE_BIGQUERY}" \
-      -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
-      -var="enable_vision_ai=${ENABLE_VISION_AI}" \
-      -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
-      -var="enable_translation=${ENABLE_TRANSLATION}" \
-      -var="enable_scheduler=${ENABLE_SCHEDULER}" \
-      -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
-      -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
-      -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
-      -var="enable_monitoring=${ENABLE_MONITORING}" \
-      -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
-      -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-      -var="enable_mysql=${ENABLE_MYSQL}" \
-      -var="mysql_database_name=${MYSQL_DB_NAME}" \
-      -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-      -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" \
+      $(build_tf_vars) \
       "${resource_type}" "${resource_id}" 2>&1)
 
     if echo "$output" | grep -qE "Successfully imported|Import successful"; then
         return 0
     elif echo "$output" | grep -q "Configuration for import target does not exist"; then
-        # Resource config doesn't exist (feature disabled or not configured)
-        # Will be created/skipped based on terraform apply
         return 0
     else
         echo "$output"
@@ -880,420 +1185,256 @@ import_resource() {
     fi
 }
 
-# BigQuery Dataset
-if [ "$ENABLE_BIGQUERY" == "true" ]; then
-    DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
-    if bq ls -d "$DATASET_ID" --project_id="$PROJECT_ID" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_bigquery_dataset.app_analytics[0]"; then
-            echo -e "${BLUE}→${NC} Found BigQuery dataset ${CYAN}${DATASET_ID}${NC} in GCP but not in Terraform state"
-            if import_resource "google_bigquery_dataset.app_analytics[0]" "$DATASET_ID"; then
-                echo -e "${GREEN}✓${NC} Imported BigQuery dataset"
-            else
-                echo -e "${RED}✗${NC} Failed to import BigQuery dataset"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} BigQuery dataset already in Terraform state"
-        fi
-    fi
-fi
+check_and_import_resource() {
+    # Parallel worker for state reconciliation
+    # Args: resource_type resource_id gcp_check_cmd display_name
+    local resource_type=$1
+    local resource_id=$2
+    local gcp_check_cmd=$3
+    local display_name=$4
+    local state_path=$5
 
-# Cloud Scheduler Job
-if [ "$ENABLE_SCHEDULER" == "true" ]; then
-    if gcloud scheduler jobs describe "${APP_NAME}-cron" --location="${GCP_REGION}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_cloud_scheduler_job.app_cron[0]"; then
-            echo -e "${BLUE}→${NC} Found Cloud Scheduler job ${CYAN}${APP_NAME}-cron${NC} in GCP but not in Terraform state"
-            if import_resource "google_cloud_scheduler_job.app_cron[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/jobs/${APP_NAME}-cron"; then
-                echo -e "${GREEN}✓${NC} Imported Cloud Scheduler job"
-            else
-                echo -e "${RED}✗${NC} Failed to import Cloud Scheduler job"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Cloud Scheduler job already in Terraform state"
-        fi
+    # Check if already in state
+    if terraform -chdir="$(dirname "$0")" state list "$state_path" &>/dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} $display_name already in Terraform state"
+        return 0
     fi
-fi
 
-# Pub/Sub Topic
-if [ "$ENABLE_PUBSUB" == "true" ]; then
-    if gcloud pubsub topics describe "${APP_NAME}-events" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_pubsub_topic.app_events[0]"; then
-            echo -e "${BLUE}→${NC} Found Pub/Sub topic ${CYAN}${APP_NAME}-events${NC} in GCP but not in Terraform state"
-            if import_resource "google_pubsub_topic.app_events[0]" "projects/${PROJECT_ID}/topics/${APP_NAME}-events"; then
-                echo -e "${GREEN}✓${NC} Imported Pub/Sub topic"
-            else
-                echo -e "${RED}✗${NC} Failed to import Pub/Sub topic"
-                exit 1
-            fi
+    # Check if exists in GCP
+    if eval "$gcp_check_cmd" &>/dev/null 2>&1; then
+        echo -e "${BLUE}→${NC} Found $display_name in GCP but not in Terraform state"
+        if import_resource "$resource_type" "$resource_id"; then
+            echo -e "${GREEN}✓${NC} Imported $display_name"
         else
-            echo -e "${GREEN}✓${NC} Pub/Sub topic already in Terraform state"
+            echo -e "${RED}✗${NC} Failed to import $display_name"
+            return 1
         fi
     fi
-fi
+    return 0
+}
 
-# Pub/Sub Subscription
-if [ "$ENABLE_PUBSUB" == "true" ]; then
-    if gcloud pubsub subscriptions describe "${APP_NAME}-events-subscription" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_pubsub_subscription.app_events_sub[0]"; then
-            echo -e "${BLUE}→${NC} Found Pub/Sub subscription ${CYAN}${APP_NAME}-events-subscription${NC} in GCP but not in Terraform state"
-            if import_resource "google_pubsub_subscription.app_events_sub[0]" "projects/${PROJECT_ID}/subscriptions/${APP_NAME}-events-subscription"; then
-                echo -e "${GREEN}✓${NC} Imported Pub/Sub subscription"
-            else
-                echo -e "${RED}✗${NC} Failed to import Pub/Sub subscription"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Pub/Sub subscription already in Terraform state"
-        fi
-    fi
-fi
+# Run import checks in parallel (all are independent)
+# Collect PIDs of background processes
+declare -a import_pids
 
-# Artifact Registry Repository
-if gcloud artifacts repositories describe "${APP_NAME}-images" --location="${GCP_REGION}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-    if ! is_in_terraform_state "google_artifact_registry_repository.app_images[0]"; then
-        echo -e "${BLUE}→${NC} Found Artifact Registry repository ${CYAN}${APP_NAME}-images${NC} in GCP but not in Terraform state"
-        if import_resource "google_artifact_registry_repository.app_images[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/repositories/${APP_NAME}-images"; then
-            echo -e "${GREEN}✓${NC} Imported Artifact Registry repository"
-        else
-            echo -e "${RED}✗${NC} Failed to import Artifact Registry repository"
-            exit 1
-        fi
-    else
-        echo -e "${GREEN}✓${NC} Artifact Registry repository already in Terraform state"
-    fi
-fi
+# Service Accounts - always check
+check_and_import_resource "google_service_account.app" \
+    "${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    "gcloud iam service-accounts describe ${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com --project=${PROJECT_ID}" \
+    "Service account (app)" \
+    "google_service_account.app" &
+import_pids+=($!)
 
-# Service Account (app)
-if gcloud iam service-accounts describe "${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-    if ! is_in_terraform_state "google_service_account.app"; then
-        echo -e "${BLUE}→${NC} Found service account ${CYAN}${APP_NAME}${NC} in GCP but not in Terraform state"
-        if import_resource "google_service_account.app" "${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"; then
-            echo -e "${GREEN}✓${NC} Imported service account"
-        else
-            echo -e "${RED}✗${NC} Failed to import service account"
-            exit 1
-        fi
-    else
-        echo -e "${GREEN}✓${NC} Service account already in Terraform state"
-    fi
-fi
+check_and_import_resource "google_service_account.cloud_build" \
+    "${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com" \
+    "gcloud iam service-accounts describe ${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com --project=${PROJECT_ID}" \
+    "Cloud Build service account" \
+    "google_service_account.cloud_build" &
+import_pids+=($!)
 
-# Service Account (cloud_build)
-if gcloud iam service-accounts describe "${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-    if ! is_in_terraform_state "google_service_account.cloud_build"; then
-        echo -e "${BLUE}→${NC} Found Cloud Build service account ${CYAN}${APP_NAME}-builder${NC} in GCP but not in Terraform state"
-        if import_resource "google_service_account.cloud_build" "${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com"; then
-            echo -e "${GREEN}✓${NC} Imported Cloud Build service account"
-        else
-            echo -e "${RED}✗${NC} Failed to import Cloud Build service account"
-            exit 1
-        fi
-    else
-        echo -e "${GREEN}✓${NC} Cloud Build service account already in Terraform state"
-    fi
-fi
+# Artifact Registry - always check
+check_and_import_resource "google_artifact_registry_repository.app_images[0]" \
+    "projects/${PROJECT_ID}/locations/${GCP_REGION}/repositories/${APP_NAME}-images" \
+    "gcloud artifacts repositories describe ${APP_NAME}-images --location=${GCP_REGION} --project=${PROJECT_ID}" \
+    "Artifact Registry repository" \
+    "google_artifact_registry_repository.app_images[0]" &
+import_pids+=($!)
 
-# Storage Bucket (app)
-if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then
-    APP_BUCKET="${APP_NAME}-storage-*"
-    EXISTING_BUCKET=$(gcloud storage buckets list --project="${PROJECT_ID}" --filter="name:${APP_NAME}-storage" --format="value(name)" 2>/dev/null | head -1)
-    if [ -n "$EXISTING_BUCKET" ]; then
-        if ! is_in_terraform_state "google_storage_bucket.app[0]"; then
-            echo -e "${BLUE}→${NC} Found storage bucket ${CYAN}${EXISTING_BUCKET}${NC} in GCP but not in Terraform state"
-            if import_resource "google_storage_bucket.app[0]" "$EXISTING_BUCKET"; then
-                echo -e "${GREEN}✓${NC} Imported storage bucket"
-            else
-                echo -e "${RED}✗${NC} Failed to import storage bucket"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Storage bucket already in Terraform state"
-        fi
-    fi
-fi
-
-# Storage Bucket (cloud_build_logs)
-if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
-    LOGS_BUCKET="${PROJECT_ID}_cloudbuild"
-    if gcloud storage buckets describe "gs://${LOGS_BUCKET}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_storage_bucket.cloud_build_logs[0]"; then
-            echo -e "${BLUE}→${NC} Found Cloud Build logs bucket ${CYAN}${LOGS_BUCKET}${NC} in GCP but not in Terraform state"
-            if import_resource "google_storage_bucket.cloud_build_logs[0]" "$LOGS_BUCKET"; then
-                echo -e "${GREEN}✓${NC} Imported Cloud Build logs bucket"
-            else
-                echo -e "${RED}✗${NC} Failed to import Cloud Build logs bucket"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Cloud Build logs bucket already in Terraform state"
-        fi
-    fi
-fi
+# Cloud Run Service - always check
+check_and_import_resource "google_cloud_run_v2_service.app" \
+    "${GCP_REGION}/${APP_NAME}" \
+    "gcloud run services describe ${APP_NAME} --region=${GCP_REGION} --project=${PROJECT_ID}" \
+    "Cloud Run service" \
+    "google_cloud_run_v2_service.app" &
+import_pids+=($!)
 
 # BigQuery Dataset
 if [ "$ENABLE_BIGQUERY" == "true" ]; then
     DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
-    if ! is_in_terraform_state "google_bigquery_dataset.app_analytics[0]"; then
-        if bq ls -d "$DATASET_ID" --project_id="$PROJECT_ID" &>/dev/null 2>&1; then
-            echo -e "${BLUE}→${NC} Found BigQuery dataset ${CYAN}${DATASET_ID}${NC} in GCP but not in Terraform state"
-            if import_resource "google_bigquery_dataset.app_analytics[0]" "$DATASET_ID"; then
-                echo -e "${GREEN}✓${NC} Imported BigQuery dataset"
-            else
-                echo -e "${RED}✗${NC} Failed to import BigQuery dataset"
-                exit 1
-            fi
-        fi
-    fi
-fi
-
-# Cloud Run Service (always created, not conditional)
-if gcloud run services describe "${APP_NAME}" --region="${GCP_REGION}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-    if ! is_in_terraform_state "google_cloud_run_v2_service.app"; then
-        echo -e "${BLUE}→${NC} Found Cloud Run service ${CYAN}${APP_NAME}${NC} in GCP but not in Terraform state"
-        if import_resource "google_cloud_run_v2_service.app" "${GCP_REGION}/${APP_NAME}"; then
-            echo -e "${GREEN}✓${NC} Imported Cloud Run service"
-        else
-            echo -e "${RED}✗${NC} Failed to import Cloud Run service"
-            exit 1
-        fi
-    else
-        echo -e "${GREEN}✓${NC} Cloud Run service already in Terraform state"
-    fi
+    check_and_import_resource "google_bigquery_dataset.app_analytics[0]" \
+        "$DATASET_ID" \
+        "bq ls -d $DATASET_ID --project_id=${PROJECT_ID}" \
+        "BigQuery dataset" \
+        "google_bigquery_dataset.app_analytics[0]" &
+    import_pids+=($!)
 fi
 
 # Firestore Database
 if [ "$ENABLE_FIRESTORE" == "true" ]; then
-    if ! is_in_terraform_state "google_firestore_database.default[0]"; then
-        # Check if Firestore database exists by looking for any database
-        if gcloud firestore databases list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -q ".*"; then
-            echo -e "${BLUE}→${NC} Found Firestore database in GCP but not in Terraform state"
-            if import_resource "google_firestore_database.default[0]" "(default)"; then
-                echo -e "${GREEN}✓${NC} Imported Firestore database"
-            else
-                echo -e "${RED}✗${NC} Failed to import Firestore database"
-                exit 1
-            fi
-        fi
+    check_and_import_resource "google_firestore_database.default[0]" \
+        "(default)" \
+        "gcloud firestore databases list --project=${PROJECT_ID} --format=value(name) | grep -q ." \
+        "Firestore database" \
+        "google_firestore_database.default[0]" &
+    import_pids+=($!)
+fi
+
+# Cloud Storage - app bucket
+if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then
+    EXISTING_BUCKET=$(gcloud storage buckets list --project="${PROJECT_ID}" --filter="name:${APP_NAME}-storage" --format="value(name)" 2>/dev/null | head -1)
+    if [ -n "$EXISTING_BUCKET" ]; then
+        check_and_import_resource "google_storage_bucket.app[0]" \
+            "$EXISTING_BUCKET" \
+            "gcloud storage buckets describe gs://${EXISTING_BUCKET} --project=${PROJECT_ID}" \
+            "Storage bucket (app)" \
+            "google_storage_bucket.app[0]" &
+        import_pids+=($!)
     fi
 fi
 
-# Pub/Sub Topic (budget alerts)
-if [ "$ENABLE_MONITORING" == "true" ]; then
-    BUDGET_TOPIC="${APP_NAME}-budget-alerts"
-    if gcloud pubsub topics describe "$BUDGET_TOPIC" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_pubsub_topic.budget_alerts[0]"; then
-            echo -e "${BLUE}→${NC} Found Pub/Sub topic ${CYAN}${BUDGET_TOPIC}${NC} in GCP but not in Terraform state"
-            if import_resource "google_pubsub_topic.budget_alerts[0]" "projects/${PROJECT_ID}/topics/${BUDGET_TOPIC}"; then
-                echo -e "${GREEN}✓${NC} Imported budget alerts Pub/Sub topic"
-            else
-                echo -e "${RED}✗${NC} Failed to import budget alerts Pub/Sub topic"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Budget alerts Pub/Sub topic already in Terraform state"
-        fi
-    fi
-fi
-
-# Secret Manager Secret
-if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then
-    EXAMPLE_SECRET="${APP_NAME}-example-secret"
-    if gcloud secrets describe "$EXAMPLE_SECRET" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_secret_manager_secret.example[0]"; then
-            echo -e "${BLUE}→${NC} Found Secret Manager secret ${CYAN}${EXAMPLE_SECRET}${NC} in GCP but not in Terraform state"
-            if import_resource "google_secret_manager_secret.example[0]" "$EXAMPLE_SECRET"; then
-                echo -e "${GREEN}✓${NC} Imported Secret Manager secret"
-            else
-                echo -e "${RED}✗${NC} Failed to import Secret Manager secret"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Secret Manager secret already in Terraform state"
-        fi
-    fi
-fi
-
-# Cloud Build Trigger
+# Cloud Storage - Cloud Build logs
 if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
-    TRIGGER_NAME="${APP_NAME}-trigger"
-    TRIGGER_ID=$(gcloud builds triggers list --project="${PROJECT_ID}" --filter="name:${TRIGGER_NAME}" --format="value(id)" 2>/dev/null | head -1)
-    if [ -n "$TRIGGER_ID" ]; then
-        if ! is_in_terraform_state "google_cloudbuild_trigger.app_build[0]"; then
-            echo -e "${BLUE}→${NC} Found Cloud Build trigger ${CYAN}${TRIGGER_NAME}${NC} in GCP but not in Terraform state"
-            if import_resource "google_cloudbuild_trigger.app_build[0]" "$TRIGGER_ID"; then
-                echo -e "${GREEN}✓${NC} Imported Cloud Build trigger"
-            else
-                echo -e "${RED}✗${NC} Failed to import Cloud Build trigger"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Cloud Build trigger already in Terraform state"
-        fi
-    fi
+    LOGS_BUCKET="${PROJECT_ID}_cloudbuild"
+    check_and_import_resource "google_storage_bucket.cloud_build_logs[0]" \
+        "$LOGS_BUCKET" \
+        "gcloud storage buckets describe gs://${LOGS_BUCKET} --project=${PROJECT_ID}" \
+        "Cloud Build logs bucket" \
+        "google_storage_bucket.cloud_build_logs[0]" &
+    import_pids+=($!)
+fi
+
+# Cloud Scheduler
+if [ "$ENABLE_SCHEDULER" == "true" ]; then
+    check_and_import_resource "google_cloud_scheduler_job.app_cron[0]" \
+        "projects/${PROJECT_ID}/locations/${GCP_REGION}/jobs/${APP_NAME}-cron" \
+        "gcloud scheduler jobs describe ${APP_NAME}-cron --location=${GCP_REGION} --project=${PROJECT_ID}" \
+        "Cloud Scheduler job" \
+        "google_cloud_scheduler_job.app_cron[0]" &
+    import_pids+=($!)
+fi
+
+# Pub/Sub Topic (app events)
+if [ "$ENABLE_PUBSUB" == "true" ]; then
+    check_and_import_resource "google_pubsub_topic.app_events[0]" \
+        "projects/${PROJECT_ID}/topics/${APP_NAME}-events" \
+        "gcloud pubsub topics describe ${APP_NAME}-events --project=${PROJECT_ID}" \
+        "Pub/Sub topic (app events)" \
+        "google_pubsub_topic.app_events[0]" &
+    import_pids+=($!)
+
+    check_and_import_resource "google_pubsub_subscription.app_events_sub[0]" \
+        "projects/${PROJECT_ID}/subscriptions/${APP_NAME}-events-subscription" \
+        "gcloud pubsub subscriptions describe ${APP_NAME}-events-subscription --project=${PROJECT_ID}" \
+        "Pub/Sub subscription (app events)" \
+        "google_pubsub_subscription.app_events_sub[0]" &
+    import_pids+=($!)
 fi
 
 # Cloud Tasks Queue
 if [ "$ENABLE_CLOUD_TASKS" == "true" ]; then
     QUEUE_NAME=$(gcloud tasks queues list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-jobs" --format="value(name)" 2>/dev/null | head -1)
     if [ -n "$QUEUE_NAME" ]; then
-        if ! is_in_terraform_state "google_cloud_tasks_queue.app_jobs[0]"; then
-            echo -e "${BLUE}→${NC} Found Cloud Tasks queue in GCP but not in Terraform state"
-            # Use full resource ID format: projects/PROJECT/locations/REGION/queues/NAME
-            QUEUE_RESOURCE_ID="projects/${PROJECT_ID}/locations/${GCP_REGION}/queues/${QUEUE_NAME}"
-            if import_resource "google_cloud_tasks_queue.app_jobs[0]" "$QUEUE_RESOURCE_ID"; then
-                echo -e "${GREEN}✓${NC} Imported Cloud Tasks queue"
-            else
-                echo -e "${RED}✗${NC} Failed to import Cloud Tasks queue"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} Cloud Tasks queue already in Terraform state"
-        fi
+        check_and_import_resource "google_cloud_tasks_queue.app_jobs[0]" \
+            "projects/${PROJECT_ID}/locations/${GCP_REGION}/queues/${QUEUE_NAME}" \
+            "gcloud tasks queues describe ${QUEUE_NAME} --location=${GCP_REGION} --project=${PROJECT_ID}" \
+            "Cloud Tasks queue" \
+            "google_cloud_tasks_queue.app_jobs[0]" &
+        import_pids+=($!)
     fi
 fi
 
-# Budget Alerts Subscription
+# Secret Manager Secret
+if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then
+    EXAMPLE_SECRET="${APP_NAME}-example-secret"
+    check_and_import_resource "google_secret_manager_secret.example[0]" \
+        "$EXAMPLE_SECRET" \
+        "gcloud secrets describe $EXAMPLE_SECRET --project=${PROJECT_ID}" \
+        "Secret Manager secret" \
+        "google_secret_manager_secret.example[0]" &
+    import_pids+=($!)
+fi
+
+# Cloud Build Trigger
+if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
+    TRIGGER_ID=$(gcloud builds triggers list --project="${PROJECT_ID}" --filter="name:${APP_NAME}-trigger" --format="value(id)" 2>/dev/null | head -1)
+    if [ -n "$TRIGGER_ID" ]; then
+        check_and_import_resource "google_cloudbuild_trigger.app_build[0]" \
+            "$TRIGGER_ID" \
+            "gcloud builds triggers describe $TRIGGER_ID --project=${PROJECT_ID}" \
+            "Cloud Build trigger" \
+            "google_cloudbuild_trigger.app_build[0]" &
+        import_pids+=($!)
+    fi
+fi
+
+# Pub/Sub Topic (budget alerts)
 if [ "$ENABLE_MONITORING" == "true" ]; then
-    if ! is_in_terraform_state "google_pubsub_subscription.budget_alerts_sub[0]"; then
-        ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
-        if gcloud pubsub subscriptions list --project="${PROJECT_ID}" --filter="name:${ALERTS_SUB}" --format="value(name)" 2>/dev/null | grep -q "$ALERTS_SUB"; then
-            echo -e "${BLUE}→${NC} Found Pub/Sub subscription ${CYAN}${ALERTS_SUB}${NC} in GCP but not in Terraform state"
-            if import_resource "google_pubsub_subscription.budget_alerts_sub[0]" "projects/${PROJECT_ID}/subscriptions/${ALERTS_SUB}"; then
-                echo -e "${GREEN}✓${NC} Imported budget alerts subscription"
-            else
-                echo -e "${RED}✗${NC} Failed to import budget alerts subscription"
-                exit 1
-            fi
-        fi
-    else
-        echo -e "${GREEN}✓${NC} Budget alerts subscription already in Terraform state"
-    fi
+    BUDGET_TOPIC="${APP_NAME}-budget-alerts"
+    check_and_import_resource "google_pubsub_topic.budget_alerts[0]" \
+        "projects/${PROJECT_ID}/topics/${BUDGET_TOPIC}" \
+        "gcloud pubsub topics describe $BUDGET_TOPIC --project=${PROJECT_ID}" \
+        "Pub/Sub topic (budget alerts)" \
+        "google_pubsub_topic.budget_alerts[0]" &
+    import_pids+=($!)
+
+    ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
+    check_and_import_resource "google_pubsub_subscription.budget_alerts_sub[0]" \
+        "projects/${PROJECT_ID}/subscriptions/${ALERTS_SUB}" \
+        "gcloud pubsub subscriptions describe $ALERTS_SUB --project=${PROJECT_ID}" \
+        "Pub/Sub subscription (budget alerts)" \
+        "google_pubsub_subscription.budget_alerts_sub[0]" &
+    import_pids+=($!)
 fi
 
-# KMS Key Ring
+# Cloud KMS - Key Ring and Crypto Key
 if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
     KEYRING_NAME=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(displayName)" 2>/dev/null | head -1)
     if [ -z "$KEYRING_NAME" ]; then
-        # Fallback: extract just the name from full path if needed
         KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
         KEYRING_NAME=$(echo "$KEYRING" | sed 's|.*/||')
     fi
+
     if [ -n "$KEYRING_NAME" ]; then
-        if ! is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
-            echo -e "${BLUE}→${NC} Found KMS key ring in GCP but not in Terraform state"
-            # Use short format: location/keyringName
-            if import_resource "google_kms_key_ring.app_keys[0]" "${GCP_REGION}/${KEYRING_NAME}"; then
-                echo -e "${GREEN}✓${NC} Imported KMS key ring"
-            else
-                echo -e "${RED}✗${NC} Failed to import KMS key ring"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓${NC} KMS key ring already in Terraform state"
+        check_and_import_resource "google_kms_key_ring.app_keys[0]" \
+            "${GCP_REGION}/${KEYRING_NAME}" \
+            "gcloud kms keyrings describe $KEYRING_NAME --location=${GCP_REGION} --project=${PROJECT_ID}" \
+            "KMS key ring" \
+            "google_kms_key_ring.app_keys[0]" &
+        import_pids+=($!)
+
+        # Crypto key depends on key ring existing
+        if gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING_NAME}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-key" &>/dev/null 2>&1; then
+            check_and_import_resource "google_kms_crypto_key.app_key[0]" \
+                "${PROJECT_ID}/${GCP_REGION}/${KEYRING_NAME}/${APP_NAME}-key" \
+                "gcloud kms keys describe ${APP_NAME}-key --location=${GCP_REGION} --keyring=${KEYRING_NAME} --project=${PROJECT_ID}" \
+                "KMS crypto key" \
+                "google_kms_crypto_key.app_key[0]" &
+            import_pids+=($!)
         fi
     fi
 fi
 
-# KMS Crypto Key
-if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
-    if is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
-        if ! is_in_terraform_state "google_kms_crypto_key.app_key[0]"; then
-            CRYPTOKEY="${APP_NAME}-key"
-            KEYRING_NAME=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(displayName)" 2>/dev/null | head -1)
-            if [ -z "$KEYRING_NAME" ]; then
-                # Fallback: extract just the name from full path
-                KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
-                KEYRING_NAME=$(echo "$KEYRING" | sed 's|.*/||')
-            fi
-            if [ -n "$KEYRING_NAME" ] && gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING_NAME}" --project="${PROJECT_ID}" --filter="name:${CRYPTOKEY}" &>/dev/null 2>&1; then
-                echo -e "${BLUE}→${NC} Found KMS crypto key in GCP but not in Terraform state"
-                # Use short format: project/location/keyring/key
-                if import_resource "google_kms_crypto_key.app_key[0]" "${PROJECT_ID}/${GCP_REGION}/${KEYRING_NAME}/${CRYPTOKEY}"; then
-                    echo -e "${GREEN}✓${NC} Imported KMS crypto key"
-                else
-                    echo -e "${RED}✗${NC} Failed to import KMS crypto key"
-                    exit 1
-                fi
-            fi
-        else
-            echo -e "${GREEN}✓${NC} KMS crypto key already in Terraform state"
-        fi
+# Wait for all background processes and collect any failures
+echo -e "${BLUE}→${NC} Checking resources in parallel..."
+declare import_failed=false
+for pid in "${import_pids[@]}"; do
+    if ! wait $pid; then
+        import_failed=true
     fi
-fi
+done
 
-# Final pass: Attempt imports for resources that frequently exist but may have been missed
-echo ""
-echo -e "${BOLD}Final Import Pass${NC}"
-
-# Try to import Firestore database if it exists but isn't in state
-if ! terraform -chdir="$(dirname "$0")" state list 'google_firestore_database.default[0]' &>/dev/null 2>&1; then
-    if [ "$ENABLE_FIRESTORE" == "true" ] && gcloud firestore databases list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -q ".*"; then
-        echo -e "${BLUE}→${NC} Attempting final Firestore database import"
-        terraform -chdir="$(dirname "$0")" import \
-          -var="gcp_project_id=${PROJECT_ID}" \
-          -var="app_name=${APP_NAME}" \
-          -var="gcp_region=${GCP_REGION}" \
-          -var="enable_firestore=${ENABLE_FIRESTORE}" \
-          'google_firestore_database.default[0]' \
-          '(default)' &>/dev/null 2>&1 && echo -e "${GREEN}✓${NC} Firestore database imported" || true
-    fi
-fi
-
-# Try to import Budget Alerts subscription if it exists but isn't in state
-if ! terraform -chdir="$(dirname "$0")" state list 'google_pubsub_subscription.budget_alerts_sub[0]' &>/dev/null 2>&1; then
-    if [ "$ENABLE_MONITORING" == "true" ]; then
-        ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
-        if gcloud pubsub subscriptions list --project="${PROJECT_ID}" --filter="name:${ALERTS_SUB}" --format="value(name)" 2>/dev/null | grep -q "$ALERTS_SUB"; then
-            echo -e "${BLUE}→${NC} Attempting final budget alerts subscription import"
-            terraform -chdir="$(dirname "$0")" import \
-              -var="gcp_project_id=${PROJECT_ID}" \
-              -var="app_name=${APP_NAME}" \
-              -var="gcp_region=${GCP_REGION}" \
-              -var="enable_monitoring=${ENABLE_MONITORING}" \
-              -var="enable_pubsub=${ENABLE_PUBSUB}" \
-              'google_pubsub_subscription.budget_alerts_sub[0]' \
-              "projects/${PROJECT_ID}/subscriptions/${ALERTS_SUB}" &>/dev/null 2>&1 && echo -e "${GREEN}✓${NC} Budget alerts subscription imported" || true
-        fi
-    fi
+if [ "$import_failed" = true ]; then
+    echo -e "${YELLOW}⚠${NC} Some imports had issues (check output above), continuing anyway..."
 fi
 
 echo ""
-echo -e "${BLUE}→${NC} Applying infrastructure"
+show_progress "Planning infrastructure changes"
+
 # Export quota project for billing API access in Terraform
 export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 
-# Terraform apply (direct, show all output)
-terraform -chdir="$(dirname "$0")" apply -auto-approve \
-  -var="gcp_project_id=${PROJECT_ID}" \
-  -var="app_name=${APP_NAME}" \
-  -var="gcp_region=${GCP_REGION}" \
-  -var="github_owner=${GITHUB_OWNER:-}" \
-  -var="github_repo=${GITHUB_REPO:-}" \
-  -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
-  -var="enable_firestore=${ENABLE_FIRESTORE}" \
-  -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
-  -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
-  -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
-  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
-  -var="enable_pubsub=${ENABLE_PUBSUB}" \
-  -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
-  -var="enable_bigquery=${ENABLE_BIGQUERY}" \
-  -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
-  -var="enable_vision_ai=${ENABLE_VISION_AI}" \
-  -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
-  -var="enable_translation=${ENABLE_TRANSLATION}" \
-  -var="enable_scheduler=${ENABLE_SCHEDULER}" \
-  -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
-  -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
-  -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
-  -var="enable_monitoring=${ENABLE_MONITORING}" \
-  -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
-  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-  -var="enable_mysql=${ENABLE_MYSQL}" \
-  -var="mysql_database_name=${MYSQL_DB_NAME}" \
-  -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" || exit 1
+# In dry-run mode, show plan instead of applying
+if [ "$DRY_RUN" = true ]; then
+    terraform -chdir="$(dirname "$0")" plan $(build_tf_vars) 2>&1 | tail -20
+    progress_done
+    echo ""
+    echo -e "${YELLOW}Preview complete.${NC} No changes were made."
+    echo "Run without --dry-run to apply these changes."
+    exit 0
+else
+    terraform -chdir="$(dirname "$0")" apply -auto-approve $(build_tf_vars) || exit 1
+    progress_done
+fi
 
 echo -e "${GREEN}✓${NC} Infrastructure deployed"
 
@@ -1303,8 +1444,7 @@ if ! RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url 2>&1
     exit 1
 fi
 
-echo ""
-echo -e "${BOLD}Post-Deployment Checks${NC}"
+section "Post-Deployment Verification"
 echo -e "${BLUE}→${NC} Testing endpoint ${CYAN}${RUN_URL}${NC}"
 
 RETRY_COUNT=0
@@ -1343,7 +1483,31 @@ STORAGE_BUCKET=$(get_tf_output storage_bucket)
 KMS_KEY_ID=$(get_tf_output kms_key_id)
 
 echo ""
-echo -e "${GREEN}${BOLD}Deployment Complete${NC}"
+# Create deployment summary file
+SUMMARY_FILE=".zilch-deployment-$(date +%s).txt"
+{
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Zilch Deployment Summary"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "Deployment Time: $(date)"
+    echo "Project: $PROJECT_ID"
+    echo "Application: $APP_NAME"
+    echo "Region: $GCP_REGION"
+    echo ""
+    echo "───────────────────────────────────────────────────────────────"
+    echo "Endpoints"
+    echo "───────────────────────────────────────────────────────────────"
+    echo "Cloud Run URL: $RUN_URL"
+    if [ -n "$SERVICE_ACCOUNT_EMAIL" ]; then
+        echo "Service Account: $SERVICE_ACCOUNT_EMAIL"
+    fi
+    echo ""
+} > "$SUMMARY_FILE"
+
+echo -e "${GREEN}${BOLD}✓ Deployment Complete${NC}"
+echo ""
+echo -e "Summary saved to: ${CYAN}$SUMMARY_FILE${NC}"
 echo ""
 echo -e "  Endpoint:  ${CYAN}${RUN_URL}${NC}"
 if [ -n "$SERVICE_ACCOUNT_EMAIL" ]; then
@@ -1370,35 +1534,32 @@ if [ "$ENABLE_MONITORING" == "true" ]; then echo "  ↳ ZILCH_MONITORING_ENABLED
 if [ "$ENABLE_MYSQL" == "true" ] || [[ "$ENABLE_MYSQL" == "y" ]] || [[ "$ENABLE_MYSQL" == "yes" ]]; then echo "  ↳ ZILCH_MYSQL_DATABASE     : ${MYSQL_DB_NAME}"; fi
 echo ""
 
-# Display MySQL connection info (if enabled)
+# Append MySQL connection info to summary file (if enabled)
 if [ "$ENABLE_MYSQL" == "true" ] || [[ "$ENABLE_MYSQL" == "y" ]] || [[ "$ENABLE_MYSQL" == "yes" ]]; then
-    echo -e "${BOLD}=== MySQL Database Ready ===${NC}"
     MYSQL_HOST=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_host 2>/dev/null || echo "")
     MYSQL_PORT=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_port 2>/dev/null || echo "")
     MYSQL_USER=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_user 2>/dev/null || echo "")
 
     if [ -n "$MYSQL_HOST" ] && [ -n "$MYSQL_USER" ]; then
-        echo "Connection details:"
+        {
+            echo ""
+            echo "───────────────────────────────────────────────────────────────"
+            echo "MySQL Database"
+            echo "───────────────────────────────────────────────────────────────"
+            echo "Host: $MYSQL_HOST"
+            echo "Port: ${MYSQL_PORT:-3306}"
+            echo "Database: $MYSQL_DB_NAME"
+            echo "User: $MYSQL_USER"
+            echo ""
+            echo "Connection:"
+            echo "  mysql -h $MYSQL_HOST -P ${MYSQL_PORT:-3306} -u $MYSQL_USER -p"
+            echo ""
+        } >> "$SUMMARY_FILE"
+
+        echo -e "${BOLD}MySQL Database Ready${NC}"
         echo "  Host: $MYSQL_HOST"
         echo "  Port: ${MYSQL_PORT:-3306}"
-        echo "  Database: $MYSQL_DB_NAME"
         echo "  User: $MYSQL_USER"
-        echo "  Public IP (non-standard port for security)"
-        echo ""
-        echo "To connect from Cloud Run:"
-        echo "  Host: $MYSQL_HOST (public IP)"
-        echo "  Port: ${MYSQL_PORT:-3306} (randomized per deployment)"
-        echo ""
-        echo "To manage your database:"
-        echo "  1. Connect remotely (from anywhere with password):"
-        echo "     mysql -h $MYSQL_HOST -P ${MYSQL_PORT:-3306} -u $MYSQL_USER -p"
-        echo ""
-        echo "  2. SSH to VM (bastion access):"
-        echo "     gcloud compute ssh cilium-mysql-* --zone=${GCP_REGION}-a"
-        echo ""
-        echo "  3. Database migrations:"
-        echo "     ./db/migrate.sh up"
-        echo "     ./db/migrate.sh status"
         echo ""
     fi
 fi
