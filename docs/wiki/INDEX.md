@@ -7,6 +7,7 @@ A minimal knowledge base for understanding Zilch. This wiki synthesizes how Zilc
 1. **[Deployment Workflow](entities/deployment-workflow.md)** — How `./deploy.sh` works
 2. **[Configuration](entities/configuration.md)** — What `.zilch.config` is and how to customize it
 3. **[First Deployment](topics/first-deployment.md)** — Prerequisites and verification
+4. **[Deployment Reliability](entities/deployment-reliability.md)** — Error recovery and robustness features
 
 ---
 
