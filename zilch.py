@@ -31,10 +31,6 @@ def deploy(auto: bool) -> None:
     and optional services like Firestore, Secret Manager, etc.
     """
     try:
-        # Change to script directory so we can find config and terraform files
-        script_dir = Path(__file__).parent.absolute()
-        os.chdir(script_dir)
-
         section("Zilch GCP Infrastructure Deployment")
         if auto:
             click.echo(cyan("(auto mode - using config defaults)"))
@@ -47,7 +43,7 @@ def deploy(auto: bool) -> None:
         # Check auth
         current_user = gcp.validate_gcloud_auth()
 
-        # Load or create config
+        # Load or create config (in current app directory)
         if Path(".zilch.config").exists():
             info("Loading .zilch.config")
             try:
@@ -57,12 +53,16 @@ def deploy(auto: bool) -> None:
                 error(f"Failed to load config: {e}")
                 sys.exit(1)
         else:
-            if Path(".zilch.config.template").exists():
+            # Look for template in script directory (zilch-gcp)
+            script_dir = Path(__file__).parent.absolute()
+            template_path = script_dir / ".zilch.config.template"
+
+            if template_path.exists():
                 info("Creating .zilch.config from template")
                 import shutil
 
-                shutil.copy(".zilch.config.template", ".zilch.config")
-                success("Template copied")
+                shutil.copy(str(template_path), ".zilch.config")
+                success("Template copied to current directory")
                 click.echo(
                     cyan("→ Edit .zilch.config and uncomment settings, then re-run")
                 )
@@ -170,10 +170,6 @@ def teardown(force: bool) -> None:
     the remote state bucket.
     """
     try:
-        # Change to script directory so we can find config and terraform files
-        script_dir = Path(__file__).parent.absolute()
-        os.chdir(script_dir)
-
         section("Zilch Infrastructure Teardown")
         click.echo(click.style("⚠️  WARNING: This action is IRREVERSIBLE", fg="red"))
         click.echo()
@@ -346,8 +342,11 @@ def _run_terraform(config: ZilchConfig) -> None:
     state_bucket = f"{config.gcp_project_id}-zilch-tfstate"
     state_prefix = f"terraform/state/{config.app_name}"
 
+    # Terraform files are in the script directory (zilch-gcp)
+    script_dir = Path(__file__).parent.absolute()
+
     try:
-        tf = TerraformExecutor()
+        tf = TerraformExecutor(str(script_dir))
         tf.init(state_bucket, state_prefix)
 
         # State reconciliation (import existing resources)
