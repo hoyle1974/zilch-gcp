@@ -670,7 +670,7 @@ echo -e "${BOLD}Terraform${NC}"
 
 # Check for and handle stale Terraform state locks
 handle_terraform_lock() {
-    local lock_path="gs://${STATE_BUCKET}/terraform/state/default.tflock"
+    local lock_path="gs://${STATE_BUCKET}/terraform/state/${APP_NAME}/default.tflock"
 
     if gcloud storage ls "$lock_path" &>/dev/null 2>&1; then
         echo -e "${YELLOW}⚠${NC} Found existing Terraform state lock"
@@ -746,7 +746,7 @@ TF_MAX_RETRIES=3
 while [ $TF_INIT_RETRIES -lt $TF_MAX_RETRIES ]; do
     if terraform -chdir="$(dirname "$0")" init \
         -backend-config="bucket=${STATE_BUCKET}" \
-        -backend-config="prefix=terraform/state" \
+        -backend-config="prefix=terraform/state/${APP_NAME}" \
         -reconfigure 2>&1; then
         TF_INIT_SUCCESS=true
         break

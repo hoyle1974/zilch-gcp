@@ -576,6 +576,10 @@ resource "google_secret_manager_secret_version" "example" {
   count       = var.enable_secret_manager ? 1 : 0
   secret      = google_secret_manager_secret.example[0].id
   secret_data = "placeholder-secret-value"
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
 }
 
 resource "google_project_iam_member" "secret_manager" {

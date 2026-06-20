@@ -204,7 +204,7 @@ echo "  Deleting Cloud Build logs buckets..."
 gcloud storage buckets delete "gs://${PROJECT_ID}_cloudbuild" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting storage buckets..."
-gcloud storage buckets list --project="$PROJECT_ID" --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r bucket; do
+gcloud storage buckets list --project="$PROJECT_ID" --filter="name:${APP_NAME}-*" --format="value(name)" 2>/dev/null | while read -r bucket; do
     [ -n "$bucket" ] && gcloud storage buckets delete "gs://$bucket" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 done
 
@@ -212,37 +212,30 @@ echo "  Deleting artifact registries..."
 gcloud artifacts repositories delete "${APP_NAME}-images" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting Pub/Sub subscriptions..."
-gcloud pubsub subscriptions list --project="$PROJECT_ID" --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r sub; do
-    [ -n "$sub" ] && gcloud pubsub subscriptions delete "$sub" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-done
+gcloud pubsub subscriptions delete "${APP_NAME}-events-subscription" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting BigQuery datasets..."
-gcloud bigquery datasets list --project="$PROJECT_ID" --filter="name:$(echo ${APP_NAME} | tr '-' '_')" --format="value(name)" 2>/dev/null | while read -r dataset; do
-    [ -n "$dataset" ] && gcloud bigquery datasets delete --dataset="$dataset" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-done
+DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
+gcloud bigquery datasets delete --dataset="$DATASET_ID" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting secrets..."
-gcloud secrets list --project="$PROJECT_ID" --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r secret; do
+gcloud secrets list --project="$PROJECT_ID" --filter="name:${APP_NAME}-*" --format="value(name)" 2>/dev/null | while read -r secret; do
     [ -n "$secret" ] && gcloud secrets delete "$secret" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 done
 
 echo "  Deleting KMS keyrings (30-day scheduled deletion)..."
-gcloud kms keyrings list --location=us-central1 --project="$PROJECT_ID" --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r keyring; do
-    [ -n "$keyring" ] && gcloud kms keyrings delete "$keyring" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
-done
+gcloud kms keyrings delete "${APP_NAME}" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting Cloud Build triggers..."
 gcloud builds triggers delete "${APP_NAME}-trigger" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting Cloud Tasks queues..."
-gcloud cloud-tasks queues list --project="$PROJECT_ID" --location=us-central1 --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r queue; do
-    [ -n "$queue" ] && gcloud cloud-tasks queues delete "$queue" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
-done
+gcloud cloud-tasks queues delete "${APP_NAME}-jobs" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
 echo "  Deleting billing budgets..."
 if [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
     gcloud beta billing budgets list --billing-account="$GCP_BILLING_ACCOUNT_ID" \
-        --filter="displayName:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r budget_name; do
+        --filter="displayName=${APP_NAME}-budget" --format="value(name)" 2>/dev/null | while read -r budget_name; do
         if [ -n "$budget_name" ]; then
             gcloud beta billing budgets delete "$budget_name" --quiet 2>/dev/null || true
         fi
