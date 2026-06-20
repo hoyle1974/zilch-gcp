@@ -814,13 +814,14 @@ while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
     TF_APPLY_OUTPUT=$(cat "$TF_TEMP_OUTPUT")
     rm -f "$TF_TEMP_OUTPUT"
 
-    if [ $TF_EXIT_CODE -eq 0 ]; then
+    # Check for terraform errors in output (terraform may return 0 even with errors)
+    if [ $TF_EXIT_CODE -eq 0 ] && ! echo "$TF_APPLY_OUTPUT" | grep -qE "^Error:|^╷|Error:.*already exists|Error:.*duplicate"; then
         TF_APPLY_SUCCESS=true
         break
     fi
 
     # Check for specific "already exists" errors and try to recover
-    if echo "$TF_APPLY_OUTPUT" | grep -q "Already Exists: Dataset"; then
+    if echo "$TF_APPLY_OUTPUT" | grep -iE "Already Exists.*Dataset|Error.*409.*duplicate"; then
         echo -e "${YELLOW}⚠${NC} Detected existing BigQuery dataset"
         DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
         echo -e "${BLUE}→${NC} Importing existing dataset into Terraform state"
