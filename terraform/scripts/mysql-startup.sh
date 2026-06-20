@@ -6,9 +6,9 @@ set -euo pipefail
 
 MYSQL_DATA_DIR="/data"
 MYSQL_USER="root"
-MYSQL_ROOT_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-root-password-${RESOURCE_SUFFIX}")
+MYSQL_ROOT_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-root-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}")
 MYSQL_APP_USER="zilch_user"
-MYSQL_APP_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-app-password-${RESOURCE_SUFFIX}")
+MYSQL_APP_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-app-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}")
 MYSQL_DATABASE="zilch_app"
 
 # Log function
