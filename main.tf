@@ -519,11 +519,15 @@ resource "google_project_service" "kms" {
 # Cloud KMS keyring for encryption
 resource "google_kms_key_ring" "app_keys" {
   count    = var.enable_cloud_kms ? 1 : 0
-  name     = "${var.app_name}-keyring-${random_id.kms_suffix.hex}"
+  name     = "${var.app_name}-keyring"
   location = var.gcp_region
   project  = var.gcp_project_id
 
   depends_on = [google_project_service.kms[0]]
+
+  lifecycle {
+    ignore_changes = [name]
+  }
 }
 
 # Cloud KMS crypto key for encryption/decryption
@@ -535,6 +539,10 @@ resource "google_kms_crypto_key" "app_key" {
 
   labels = {
     app = var.app_name
+  }
+
+  lifecycle {
+    ignore_changes = [name]
   }
 }
 
