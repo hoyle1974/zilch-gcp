@@ -100,9 +100,8 @@ resource "google_compute_firewall" "mysql_public" {
   }
 
   # Allow from anywhere (protected by password + non-standard port)
-  source_ranges           = ["0.0.0.0/0"]
-  target_tags             = [local.mysql_network_tag]
-  target_service_accounts = []
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = [local.mysql_network_tag]
 
   depends_on = [google_service_account.mysql]
 }
