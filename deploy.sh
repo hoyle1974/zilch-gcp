@@ -1255,7 +1255,7 @@ terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="enable_monitoring=${ENABLE_MONITORING}" \
   -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
   -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-  -var="enable_mysql=${ENABLE_MYSQL}" \
+  -var="enable_mysql=$([ "$ENABLE_MYSQL" = "true" ] && echo true || echo false)" \
   -var="mysql_database_name=${MYSQL_DB_NAME}" \
   -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
   -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" || exit 1
