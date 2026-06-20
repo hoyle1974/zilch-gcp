@@ -234,13 +234,11 @@ resource "google_cloud_run_v2_service" "app" {
     }
   }
 
-  # Prevents Terraform from overwriting deployments made by gcloud CLI or Cloud Build
-  # Ignores image updates, annotations, and labels which are frequently changed externally
+  # Prevents Terraform from overwriting the Docker image (managed by gcloud/Cloud Build)
+  # Environment variables ARE managed by Terraform and trigger new revisions when changed
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
-      annotations,
-      labels
     ]
   }
 
