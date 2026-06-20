@@ -784,7 +784,7 @@ import_resource() {
         -var="gcp_region=${GCP_REGION}" \
         "${resource_type}" "${resource_id}" 2>&1)
 
-    if echo "$output" | grep -q "Successfully imported"; then
+    if echo "$output" | grep -qE "Successfully imported|Import successful"; then
         return 0
     elif echo "$output" | grep -q "Configuration for import target does not exist"; then
         # Resource doesn't exist in Terraform config yet - will be created by apply
