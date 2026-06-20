@@ -444,22 +444,31 @@ def get_billing_info(project_id: str) -> Optional[dict]:
             try:
                 budgets_client = billing_v1.BudgetServiceClient()
                 parent = f"billingAccounts/{billing_account}"
-                budgets = budgets_client.list_budgets(parent=parent)
+                budgets_list = budgets_client.list_budgets(parent=parent)
+                budgets = list(budgets_list)
 
                 # Get current month spending from budgets
-                total_spent = 0.0
-                for budget in budgets:
-                    if hasattr(budget, 'threshold_rule') and budget.threshold_rule:
-                        # Budget has spending info
-                        if hasattr(budget, 'amount') and budget.amount:
-                            if hasattr(budget.amount, 'specified_amount'):
-                                spent = budget.amount.specified_amount.units or 0
-                                nanos = budget.amount.specified_amount.nanos or 0
-                                total_spent += spent + (nanos / 1e9)
+                if budgets:
+                    budget = budgets[0]  # Use first budget
+                    # Try to get actual spending data
+                    if hasattr(budget, 'calculated_spend'):
+                        # Some budget versions include calculated spend
+                        if hasattr(budget.calculated_spend, 'actual_last_period_spend'):
+                            actual_spend = budget.calculated_spend.actual_last_period_spend
+                            if hasattr(actual_spend, 'units'):
+                                spent = actual_spend.units or 0
+                                nanos = actual_spend.nanos or 0
+                                total_spent = spent + (nanos / 1e9)
+                                return {
+                                    "currency": "USD",
+                                    "amount": total_spent,
+                                    "account_name": account.display_name or billing_account,
+                                }
 
+                # Fallback: return account info without spending data
                 return {
                     "currency": "USD",
-                    "amount": total_spent,
+                    "amount": None,
                     "account_name": account.display_name or billing_account,
                 }
             except Exception as budget_err:

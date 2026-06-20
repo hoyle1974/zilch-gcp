@@ -567,7 +567,8 @@ def _run_health_checks(config: ZilchConfig) -> None:
     section("Post-Deployment Checks")
 
     try:
-        tf = TerraformExecutor()
+        script_dir = Path(__file__).parent.absolute()
+        tf = TerraformExecutor(str(script_dir))
         url = tf.get_output("cloud_run_url")
 
         if url:
@@ -581,7 +582,8 @@ def _run_health_checks(config: ZilchConfig) -> None:
 def _print_summary(config: ZilchConfig) -> None:
     """Print deployment summary."""
     try:
-        tf = TerraformExecutor()
+        script_dir = Path(__file__).parent.absolute()
+        tf = TerraformExecutor(str(script_dir))
         outputs = {}
 
         url = tf.get_output("cloud_run_url")
