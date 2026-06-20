@@ -107,6 +107,90 @@ def prompt_toggle(feature_name: str, current_value: bool) -> bool:
     return result
 
 
+SERVICE_METADATA = {
+    "firestore": {
+        "description": "NoSQL document database with real-time sync",
+        "docs": "https://cloud.google.com/firestore/docs",
+        "cost": "~$0.06 per 100k reads, $0.18 per 100k writes",
+    },
+    "cloud_storage": {
+        "description": "Object storage for files and media",
+        "docs": "https://cloud.google.com/storage/docs",
+        "cost": "~$0.020 per GB stored, $0.005 per 1k ops",
+    },
+    "secret_manager": {
+        "description": "Secure storage for API keys and passwords",
+        "docs": "https://cloud.google.com/secret-manager/docs",
+        "cost": "$0.06 per secret per month, $0.06 per 1k ops",
+    },
+    "firebase_auth": {
+        "description": "User authentication and login",
+        "docs": "https://firebase.google.com/docs/auth",
+        "cost": "Free tier: 50k MAU, pay per additional MAU",
+    },
+    "vertex_ai": {
+        "description": "Machine learning predictions and model training",
+        "docs": "https://cloud.google.com/vertex-ai/docs",
+        "cost": "Pricing varies by model, ~$0.02-$0.10 per prediction",
+    },
+    "pubsub": {
+        "description": "Event streaming and async messaging",
+        "docs": "https://cloud.google.com/pubsub/docs",
+        "cost": "~$0.05 per GB ingested, $0.40 per million ops",
+    },
+    "cloud_tasks": {
+        "description": "Task queue for distributed work",
+        "docs": "https://cloud.google.com/tasks/docs",
+        "cost": "~$0.10 per million tasks",
+    },
+    "bigquery": {
+        "description": "Data warehouse for large-scale SQL analytics",
+        "docs": "https://cloud.google.com/bigquery/docs",
+        "cost": "~$6.25 per TB queried, storage ~$0.02 per GB/month",
+    },
+    "cloud_kms": {
+        "description": "Key management for encryption",
+        "docs": "https://cloud.google.com/kms/docs",
+        "cost": "$0.06 per key version per month, $0.03-$0.15 per 1k ops",
+    },
+    "vision_ai": {
+        "description": "Image recognition, OCR, and object detection",
+        "docs": "https://cloud.google.com/vision/docs",
+        "cost": "~$0.50-$6.00 per 1k images depending on feature",
+    },
+    "speech_to_text": {
+        "description": "Convert audio to text",
+        "docs": "https://cloud.google.com/speech-to-text/docs",
+        "cost": "~$0.024-$0.048 per minute of audio",
+    },
+    "translation": {
+        "description": "Translate text between languages",
+        "docs": "https://cloud.google.com/translate/docs",
+        "cost": "~$15 per 1 million characters",
+    },
+    "scheduler": {
+        "description": "Cron jobs for periodic tasks",
+        "docs": "https://cloud.google.com/scheduler/docs",
+        "cost": "First 3 jobs free, $0.10 per job per month",
+    },
+    "monitoring": {
+        "description": "Logs, metrics, alerts, and budgets",
+        "docs": "https://cloud.google.com/monitoring/docs",
+        "cost": "~$0.2580 per 1M log entries ingested",
+    },
+    "cloud_build": {
+        "description": "CI/CD build and deployment automation",
+        "docs": "https://cloud.google.com/build/docs",
+        "cost": "120 free minutes/day, then $0.003 per minute",
+    },
+    "mysql": {
+        "description": "Managed relational SQL database",
+        "docs": "https://cloud.google.com/sql/docs",
+        "cost": "~$8-$50/month depending on machine type",
+    },
+}
+
+
 def _build_service_list(config: ZilchConfig) -> List[Dict[str, str | bool]]:
     """Build list of services with current config state.
 
@@ -152,7 +236,7 @@ def _apply_services_to_config(services: List[Dict[str, str | bool]], config: Zil
 
 
 def _render_menu(console: Console, services: List[Dict[str, str | bool]], current_index: int) -> None:
-    """Render the service menu.
+    """Render the service menu with side panel details.
 
     Args:
         console: Rich console for output
@@ -164,17 +248,38 @@ def _render_menu(console: Console, services: List[Dict[str, str | bool]], curren
     click.echo("Use arrow keys to navigate, space to toggle, enter to confirm")
     click.echo()
 
+    # Get details for selected service
+    selected = services[current_index]
+    meta = SERVICE_METADATA.get(selected["key"], {})
+
+    # Left column width + divider + right column width
+    left_width = 30
+    divider = " │ "
+
     for i, service in enumerate(services):
         checkbox = "[x]" if service["enabled"] else "[ ]"
         name = service["name"]
         cursor = "→ " if i == current_index else "  "
-        line = f"{cursor}{checkbox} {name}"
+        left_line = f"{cursor}{checkbox} {name}"
 
+        # Pad left side to fixed width
+        left_padded = left_line.ljust(left_width)
+
+        # Add details on the right for selected row only
         if i == current_index:
-            styled_line = click.style(line, fg="cyan", bold=True)
+            right_text = meta.get("description", "")
+            full_line = f"{left_padded}{divider}{right_text}"
+            styled_line = click.style(full_line, fg="cyan", bold=True)
             click.echo(styled_line)
         else:
-            click.echo(line)
+            click.echo(left_padded + divider)
+
+    # Show full details below the list
+    click.echo()
+    if meta:
+        click.echo(click.style("Details:", fg="cyan", bold=True))
+        click.echo(f"  Docs: {meta.get('docs', 'N/A')}")
+        click.echo(f"  Cost: {meta.get('cost', 'N/A')}")
 
 
 def _get_key() -> str:
