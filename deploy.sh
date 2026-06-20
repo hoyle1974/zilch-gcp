@@ -90,6 +90,8 @@ ENABLE_SPEECH_TO_TEXT="false"
 ENABLE_TRANSLATION="false"
 ENABLE_SCHEDULER="false"
 ENABLE_MONITORING="false"
+ENABLE_MYSQL="false"
+MYSQL_DB_NAME="zilch_app"
 ALLOW_UNAUTHENTICATED_ACCESS="true"
 SCHEDULER_SCHEDULE="0 0 * * *"
 SCHEDULER_TIMEZONE="UTC"
@@ -142,6 +144,8 @@ if [ -f ".zilch.config" ]; then
             enable_translation) ENABLE_TRANSLATION="$value" ;;
             enable_scheduler) ENABLE_SCHEDULER="$value" ;;
             enable_monitoring) ENABLE_MONITORING="$value" ;;
+            enable_mysql) ENABLE_MYSQL="$value" ;;
+            mysql_database_name) MYSQL_DB_NAME="$value" ;;
             allow_unauthenticated_access) ALLOW_UNAUTHENTICATED_ACCESS="$value" ;;
             scheduler_schedule) SCHEDULER_SCHEDULE="$value" ;;
             scheduler_timezone) SCHEDULER_TIMEZONE="$value" ;;
@@ -404,6 +408,36 @@ ENABLE_SPEECH_TO_TEXT=$(prompt_toggle "Speech-to-Text" "$ENABLE_SPEECH_TO_TEXT")
 ENABLE_TRANSLATION=$(prompt_toggle "Translation" "$ENABLE_TRANSLATION")
 ENABLE_SCHEDULER=$(prompt_toggle "Cloud Scheduler" "$ENABLE_SCHEDULER")
 
+# MySQL Database (NEW)
+echo ""
+echo "=== MySQL Database (Optional) ==="
+echo "Deploy a free MySQL database on Compute Engine?"
+echo "  • Cost: ~\$1.26/month (compute free, minimal storage)"
+echo "  • Good for: Transactional relational data"
+echo "  • Size: 1-10GB datasets, 100-500 writes/sec"
+echo ""
+if [ "$AUTO_MODE" = false ]; then
+    read -p "Enable MySQL? (y/n) [default: n]: " ENABLE_MYSQL
+    ENABLE_MYSQL="${ENABLE_MYSQL:-n}"
+else
+    ENABLE_MYSQL="n"
+fi
+
+if [[ "$ENABLE_MYSQL" == "y" || "$ENABLE_MYSQL" == "yes" ]]; then
+    TERRAFORM_VARS="$TERRAFORM_VARS -var=enable_mysql=true"
+    echo "✓ MySQL will be provisioned"
+
+    if [ "$AUTO_MODE" = false ]; then
+        # Optional: Ask for database name
+        read -p "Enter MySQL database name [default: zilch_app]: " MYSQL_DB_NAME
+        MYSQL_DB_NAME="${MYSQL_DB_NAME:-zilch_app}"
+    fi
+    TERRAFORM_VARS="$TERRAFORM_VARS -var=mysql_database_name=$MYSQL_DB_NAME"
+else
+    TERRAFORM_VARS="$TERRAFORM_VARS -var=enable_mysql=false"
+    echo "✓ MySQL will not be provisioned"
+fi
+
 if [ "$ENABLE_SCHEDULER" == "true" ] && [ "$AUTO_MODE" = false ]; then
     echo ""
     echo -e "${BOLD}Scheduler Settings${NC}"
@@ -566,6 +600,10 @@ scheduler_endpoint=${SCHEDULER_ENDPOINT}
 enable_monitoring=${ENABLE_MONITORING}
 billing_account_name=${BILLING_ACCOUNT_NAME}
 billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}
+
+# Phase 5: MySQL Database (optional)
+enable_mysql=${ENABLE_MYSQL}
+mysql_database_name=${MYSQL_DB_NAME}
 
 # Cloud Run Access Control & Billing
 allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}
@@ -804,6 +842,8 @@ import_resource() {
       -var="enable_monitoring=${ENABLE_MONITORING}" \
       -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
       -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
+      -var="enable_mysql=${ENABLE_MYSQL}" \
+      -var="mysql_database_name=${MYSQL_DB_NAME}" \
       -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
       -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" \
       "${resource_type}" "${resource_id}" 2>&1)
@@ -1215,6 +1255,8 @@ terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="enable_monitoring=${ENABLE_MONITORING}" \
   -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
   -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
+  -var="enable_mysql=${ENABLE_MYSQL}" \
+  -var="mysql_database_name=${MYSQL_DB_NAME}" \
   -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
   -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" || exit 1
 
@@ -1290,7 +1332,37 @@ if [ "$ENABLE_SPEECH_TO_TEXT" == "true" ]; then echo "  ↳ ZILCH_SPEECH_TO_TEXT
 if [ "$ENABLE_TRANSLATION" == "true" ]; then echo "  ↳ ZILCH_TRANSLATION_ENABLED: true"; fi
 if [ "$ENABLE_SCHEDULER" == "true" ]; then echo "  ↳ ZILCH_SCHEDULER_ENABLED  : ${SCHEDULER_SCHEDULE} (${SCHEDULER_TIMEZONE})"; fi
 if [ "$ENABLE_MONITORING" == "true" ]; then echo "  ↳ ZILCH_MONITORING_ENABLED : ${BILLING_BUDGET_LIMIT_USD} USD/month alert"; fi
+if [ "$ENABLE_MYSQL" == "true" ] || [[ "$ENABLE_MYSQL" == "y" ]] || [[ "$ENABLE_MYSQL" == "yes" ]]; then echo "  ↳ ZILCH_MYSQL_DATABASE     : ${MYSQL_DB_NAME}"; fi
 echo ""
+
+# Display MySQL connection info (if enabled)
+if [ "$ENABLE_MYSQL" == "true" ] || [[ "$ENABLE_MYSQL" == "y" ]] || [[ "$ENABLE_MYSQL" == "yes" ]]; then
+    echo -e "${BOLD}=== MySQL Database Ready ===${NC}"
+    MYSQL_HOST=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_host 2>/dev/null || echo "")
+    MYSQL_USER=$(terraform -chdir="$(dirname "$0")" output -raw zilch_mysql_user 2>/dev/null || echo "")
+
+    if [ -n "$MYSQL_HOST" ] && [ -n "$MYSQL_USER" ]; then
+        echo "Connection details:"
+        echo "  Host: $MYSQL_HOST"
+        echo "  Port: 3306"
+        echo "  Database: $MYSQL_DB_NAME"
+        echo "  User: $MYSQL_USER"
+        echo ""
+        echo "To manage your database:"
+        echo "  1. Cloud SQL Proxy (local dev):"
+        echo "     cloud-sql-proxy compute/${PROJECT_ID}/${GCP_REGION}/\$VM_NAME &"
+        echo "     mysql -h 127.0.0.1 -u $MYSQL_USER -p"
+        echo ""
+        echo "  2. SSH to VM (bastion access):"
+        echo "     gcloud compute ssh \$VM_NAME --zone=${GCP_REGION}-a"
+        echo ""
+        echo "  3. Database migrations:"
+        echo "     ./db/migrate.sh up"
+        echo "     ./db/migrate.sh status"
+        echo ""
+    fi
+fi
+
 echo -e "${BOLD}Next Steps:${NC}"
 echo -e "  ${CYAN}gcloud run deploy ${APP_NAME} --source .${NC}"
 echo -e "  ${CYAN}gcloud run logs read ${APP_NAME} --region=${GCP_REGION}${NC}"
