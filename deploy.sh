@@ -1005,7 +1005,8 @@ fi
 # Firestore Database
 if [ "$ENABLE_FIRESTORE" == "true" ]; then
     if ! is_in_terraform_state "google_firestore_database.default[0]"; then
-        if gcloud firestore databases describe --database-id="(default)" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        # Check if Firestore database exists by looking for any database
+        if gcloud firestore databases list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -q ".*"; then
             echo -e "${BLUE}→${NC} Found Firestore database in GCP but not in Terraform state"
             if import_resource "google_firestore_database.default[0]" "(default)"; then
                 echo -e "${GREEN}✓${NC} Imported Firestore database"
@@ -1092,9 +1093,9 @@ fi
 
 # Budget Alerts Subscription
 if [ "$ENABLE_MONITORING" == "true" ]; then
-    ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
-    if gcloud pubsub subscriptions describe "$ALERTS_SUB" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
-        if ! is_in_terraform_state "google_pubsub_subscription.budget_alerts_sub[0]"; then
+    if ! is_in_terraform_state "google_pubsub_subscription.budget_alerts_sub[0]"; then
+        ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
+        if gcloud pubsub subscriptions list --project="${PROJECT_ID}" --filter="name:${ALERTS_SUB}" --format="value(name)" 2>/dev/null | grep -q "$ALERTS_SUB"; then
             echo -e "${BLUE}→${NC} Found Pub/Sub subscription ${CYAN}${ALERTS_SUB}${NC} in GCP but not in Terraform state"
             if import_resource "google_pubsub_subscription.budget_alerts_sub[0]" "projects/${PROJECT_ID}/subscriptions/${ALERTS_SUB}"; then
                 echo -e "${GREEN}✓${NC} Imported budget alerts subscription"
@@ -1102,9 +1103,9 @@ if [ "$ENABLE_MONITORING" == "true" ]; then
                 echo -e "${RED}✗${NC} Failed to import budget alerts subscription"
                 exit 1
             fi
-        else
-            echo -e "${GREEN}✓${NC} Budget alerts subscription already in Terraform state"
         fi
+    else
+        echo -e "${GREEN}✓${NC} Budget alerts subscription already in Terraform state"
     fi
 fi
 
