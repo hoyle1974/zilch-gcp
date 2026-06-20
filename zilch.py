@@ -251,16 +251,6 @@ def teardown(force: bool) -> None:
         except Exception as e:
             warning(f"Could not fully clean local state: {e}")
 
-        # Remove config file
-        info("Removing .zilch.config")
-        try:
-            config_file = Path(".zilch.config")
-            if config_file.exists():
-                config_file.unlink()
-            success("Config file removed")
-        except Exception as e:
-            warning(f"Could not remove config: {e}")
-
         success(bold("Teardown complete!"))
 
     except KeyboardInterrupt:
