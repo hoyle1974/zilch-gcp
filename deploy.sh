@@ -24,6 +24,16 @@ fi
 echo ""
 
 echo -e "${BOLD}Prerequisites${NC}"
+
+# Check for required tools
+for cmd in gcloud terraform curl bq; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo -e "${RED}✗ Required tool not found: $cmd${NC}"
+        exit 1
+    fi
+done
+echo -e "${GREEN}✓${NC} Required tools available"
+
 if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q '@'; then
     echo -e "${RED}✗ No active gcloud authentication${NC}"
     echo ""
