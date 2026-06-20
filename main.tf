@@ -450,6 +450,10 @@ resource "google_cloud_tasks_queue" "app_jobs" {
     max_backoff  = "3600s"
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   depends_on = [google_project_service.cloud_tasks[0]]
 }
 
