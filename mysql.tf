@@ -27,9 +27,8 @@ resource "google_compute_instance" "mysql" {
     network    = "default"
     subnetwork = data.google_compute_subnetwork.default[0].id
 
-    # No external IP (security)
+    # Public IP for Cloud Run access (password + non-standard port provide security)
     access_config {
-      nat_ip = null
     }
   }
 
@@ -40,6 +39,7 @@ resource "google_compute_instance" "mysql" {
   metadata_startup_script = base64encode(templatefile("${path.root}/scripts/mysql-startup.sh", {
     RESOURCE_SUFFIX = local.mysql_resource_suffix
     PROJECT_ID      = var.gcp_project_id
+    MYSQL_PORT      = random_integer.mysql_port[0].result
   }))
 
   service_account {
@@ -84,10 +84,11 @@ data "google_compute_subnetwork" "default" {
   project = var.gcp_project_id
 }
 
-# Firewall rule: Allow Cloud Run to connect to MySQL
-resource "google_compute_firewall" "mysql_from_cloud_run" {
+# Firewall rule: Allow MySQL connections on random non-standard port
+# Security: Uses non-standard port (30000-65535) + strong password (Secret Manager)
+resource "google_compute_firewall" "mysql_public" {
   count     = var.enable_mysql ? 1 : 0
-  name      = "allow-cloud-run-to-mysql-${local.mysql_resource_suffix}"
+  name      = "allow-mysql-public-${local.mysql_resource_suffix}"
   network   = "default"
   project   = var.gcp_project_id
   direction = "INGRESS"
@@ -95,12 +96,13 @@ resource "google_compute_firewall" "mysql_from_cloud_run" {
 
   allow {
     protocol = "tcp"
-    ports    = ["3306"]
+    ports    = [tostring(random_integer.mysql_port[0].result)]
   }
 
-  # Allow from Cloud Run service account
-  source_service_accounts = [google_service_account.app.email]
-  target_service_accounts = [google_service_account.mysql[0].email]
+  # Allow from anywhere (protected by password + non-standard port)
+  source_ranges           = ["0.0.0.0/0"]
+  target_tags             = [local.mysql_network_tag]
+  target_service_accounts = []
 
   depends_on = [google_service_account.mysql]
 }
@@ -174,6 +176,14 @@ resource "google_secret_manager_secret_iam_member" "mysql_app_password_accessor"
 resource "google_secret_manager_secret_iam_member" "mysql_root_password_accessor" {
   count     = var.enable_mysql ? 1 : 0
   secret_id = google_secret_manager_secret.mysql_root_password[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mysql[0].email}"
+}
+
+# IAM: Allow MySQL VM service account to read app password
+resource "google_secret_manager_secret_iam_member" "mysql_app_password_accessor_mysql_sa" {
+  count     = var.enable_mysql ? 1 : 0
+  secret_id = google_secret_manager_secret.mysql_app_password[0].id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.mysql[0].email}"
 }

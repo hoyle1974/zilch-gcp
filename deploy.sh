@@ -159,6 +159,13 @@ if [ -f ".zilch.config" ]; then
         esac
     done < .zilch.config
 
+    # Normalize ENABLE_MYSQL to true/false (accepts y/yes/true or n/no/false)
+    if [[ "$ENABLE_MYSQL" == "y" || "$ENABLE_MYSQL" == "yes" || "$ENABLE_MYSQL" == "true" ]]; then
+        ENABLE_MYSQL="true"
+    else
+        ENABLE_MYSQL="false"
+    fi
+
     echo -e "${GREEN}✓${NC} Loaded"
 fi
 
@@ -417,20 +424,26 @@ echo "  • Good for: Transactional relational data"
 echo "  • Size: 1-10GB datasets, 100-500 writes/sec"
 echo ""
 if [ "$AUTO_MODE" = false ]; then
-    read -p "Enable MySQL? (y/n) [default: n]: " ENABLE_MYSQL
-    ENABLE_MYSQL="${ENABLE_MYSQL:-n}"
-else
-    ENABLE_MYSQL="n"
+    # Use config value as default, or "false" if not set
+    DEFAULT_MYSQL="${ENABLE_MYSQL:-false}"
+    DEFAULT_DISPLAY=$([ "$DEFAULT_MYSQL" = "true" ] && echo "y" || echo "n")
+    read -p "Enable MySQL? (y/n) [default: ${DEFAULT_DISPLAY}]: " INPUT
+    if [[ "$INPUT" == "y" || "$INPUT" == "yes" ]]; then
+        ENABLE_MYSQL="true"
+    elif [[ "$INPUT" == "n" || "$INPUT" == "no" || "$INPUT" == "" ]]; then
+        ENABLE_MYSQL="$DEFAULT_MYSQL"
+    fi
 fi
 
-if [[ "$ENABLE_MYSQL" == "y" || "$ENABLE_MYSQL" == "yes" ]]; then
+if [ "$ENABLE_MYSQL" = "true" ]; then
     TERRAFORM_VARS="$TERRAFORM_VARS -var=enable_mysql=true"
     echo "✓ MySQL will be provisioned"
 
     if [ "$AUTO_MODE" = false ]; then
-        # Optional: Ask for database name
-        read -p "Enter MySQL database name [default: zilch_app]: " MYSQL_DB_NAME
-        MYSQL_DB_NAME="${MYSQL_DB_NAME:-zilch_app}"
+        # Use config value as default, or "zilch_app" if not set
+        DEFAULT_DB_NAME="${MYSQL_DB_NAME:-zilch_app}"
+        read -p "Enter MySQL database name [default: ${DEFAULT_DB_NAME}]: " INPUT
+        MYSQL_DB_NAME="${INPUT:-$DEFAULT_DB_NAME}"
     fi
     TERRAFORM_VARS="$TERRAFORM_VARS -var=mysql_database_name=$MYSQL_DB_NAME"
 else
@@ -756,9 +769,16 @@ handle_terraform_lock() {
 
 handle_terraform_lock
 
-echo -e "${BLUE}→${NC} Enabling foundational APIs"
+echo -e "${BLUE}→${NC} Enabling required APIs"
 # Cloud Resource Manager API is required by Terraform to manage services and IAM
 gcloud services enable cloudresourcemanager.googleapis.com --project="$PROJECT_ID" --quiet 2>&1 >/dev/null
+echo -e "  ${GREEN}✓${NC} Cloud Resource Manager API"
+
+# Enable Compute Engine API if MySQL is enabled (MySQL runs on Compute Engine VM)
+if [ "$ENABLE_MYSQL" = "true" ]; then
+    gcloud services enable compute.googleapis.com --project="$PROJECT_ID" --quiet 2>&1 >/dev/null
+    echo -e "  ${GREEN}✓${NC} Compute Engine API (MySQL)"
+fi
 
 # Wait for Cloud Resource Manager API to propagate (can take a few seconds)
 API_READY=false
@@ -1119,7 +1139,9 @@ if [ "$ENABLE_CLOUD_TASKS" == "true" ]; then
     if [ -n "$QUEUE_NAME" ]; then
         if ! is_in_terraform_state "google_cloud_tasks_queue.app_jobs[0]"; then
             echo -e "${BLUE}→${NC} Found Cloud Tasks queue in GCP but not in Terraform state"
-            if import_resource "google_cloud_tasks_queue.app_jobs[0]" "$QUEUE_NAME"; then
+            # Use full resource ID format: projects/PROJECT/locations/REGION/queues/NAME
+            QUEUE_RESOURCE_ID="projects/${PROJECT_ID}/locations/${GCP_REGION}/queues/${QUEUE_NAME}"
+            if import_resource "google_cloud_tasks_queue.app_jobs[0]" "$QUEUE_RESOURCE_ID"; then
                 echo -e "${GREEN}✓${NC} Imported Cloud Tasks queue"
             else
                 echo -e "${RED}✗${NC} Failed to import Cloud Tasks queue"
@@ -1255,7 +1277,7 @@ terraform -chdir="$(dirname "$0")" apply -auto-approve \
   -var="enable_monitoring=${ENABLE_MONITORING}" \
   -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
   -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-  -var="enable_mysql=$([ "$ENABLE_MYSQL" = "true" ] && echo true || echo false)" \
+  -var="enable_mysql=${ENABLE_MYSQL}" \
   -var="mysql_database_name=${MYSQL_DB_NAME}" \
   -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
   -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" || exit 1

@@ -22,17 +22,17 @@ resource "google_project_service" "billing" {
 # Requires: gcloud beta billing accounts list to see available accounts
 # For now, monitoring works but budget alerts require manual billing account setup
 data "google_billing_account" "account" {
-  count            = 0  # Disabled: requires manual billing account ID configuration
-  open             = true
+  count = 0 # Disabled: requires manual billing account ID configuration
+  open  = true
 }
 
 # --- BUDGET ALERT WITH PUBSUB NOTIFICATION ---
 
 # Create a Pub/Sub topic for budget alerts
 resource "google_pubsub_topic" "budget_alerts" {
-  count     = var.enable_monitoring ? 1 : 0
-  name      = "${var.app_name}-budget-alerts"
-  project   = var.gcp_project_id
+  count   = var.enable_monitoring ? 1 : 0
+  name    = "${var.app_name}-budget-alerts"
+  project = var.gcp_project_id
 
   labels = {
     app = var.app_name
@@ -58,9 +58,9 @@ resource "google_pubsub_subscription" "budget_alerts_sub" {
 # Billing Budget: Alert at key thresholds (50%, 100%, 150%)
 # Requires gcp_billing_account_id to be provided during deploy.sh setup
 resource "google_billing_budget" "app_budget" {
-  count            = var.enable_monitoring && var.billing_budget_limit_usd > 0 && var.gcp_billing_account_id != "" ? 1 : 0
-  billing_account  = var.gcp_billing_account_id
-  display_name     = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
+  count           = var.enable_monitoring && var.billing_budget_limit_usd > 0 && var.gcp_billing_account_id != "" ? 1 : 0
+  billing_account = var.gcp_billing_account_id
+  display_name    = "${var.app_name} - Budget Alert (${var.billing_budget_limit_usd} USD/month)"
 
   budget_filter {
     projects = ["projects/${data.google_client_config.current.project}"]
@@ -94,11 +94,11 @@ data "google_client_config" "current" {}
 
 # Notification channel (Email - configure manually via console or use alternative)
 resource "google_monitoring_notification_channel" "app_alerts" {
-  count           = var.enable_monitoring ? 1 : 0
-  display_name    = "${var.app_name} Error Alerts"
-  type            = "pubsub"
-  enabled         = true
-  project         = var.gcp_project_id
+  count        = var.enable_monitoring ? 1 : 0
+  display_name = "${var.app_name} Error Alerts"
+  type         = "pubsub"
+  enabled      = true
+  project      = var.gcp_project_id
 
   labels = {
     topic = "projects/${var.gcp_project_id}/topics/${google_pubsub_topic.budget_alerts[0].name}"
@@ -108,10 +108,10 @@ resource "google_monitoring_notification_channel" "app_alerts" {
 # Alert Policy: High error rate on Cloud Run (triggers circuit breaker)
 # Note: This is a simplified alert - in production, use error_count metric instead
 resource "google_monitoring_alert_policy" "cloud_run_errors" {
-  count       = var.enable_monitoring ? 1 : 0
+  count        = var.enable_monitoring ? 1 : 0
   display_name = "${var.app_name} - High Error Rate Alert"
-  project     = var.gcp_project_id
-  combiner    = "OR"
+  project      = var.gcp_project_id
+  combiner     = "OR"
 
   conditions {
     display_name = "Cloud Run High Error Rate"
@@ -123,7 +123,7 @@ resource "google_monitoring_alert_policy" "cloud_run_errors" {
       threshold_value = 100
 
       aggregations {
-        alignment_period  = "60s"
+        alignment_period   = "60s"
         per_series_aligner = "ALIGN_RATE"
       }
 
@@ -138,8 +138,8 @@ resource "google_monitoring_alert_policy" "cloud_run_errors" {
 
 # IAM: Allow Cloud Run service account to receive budget alerts
 resource "google_pubsub_topic_iam_member" "budget_alerts_subscriber" {
-  count   = var.enable_monitoring ? 1 : 0
-  topic   = google_pubsub_topic.budget_alerts[0].name
-  role    = "roles/pubsub.subscriber"
-  member  = "serviceAccount:${google_service_account.app.email}"
+  count  = var.enable_monitoring ? 1 : 0
+  topic  = google_pubsub_topic.budget_alerts[0].name
+  role   = "roles/pubsub.subscriber"
+  member = "serviceAccount:${google_service_account.app.email}"
 }

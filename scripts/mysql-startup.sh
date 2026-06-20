@@ -6,6 +6,7 @@ set -euo pipefail
 
 MYSQL_DATA_DIR="/data"
 MYSQL_USER="root"
+MYSQL_PORT="${MYSQL_PORT}"
 MYSQL_ROOT_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-root-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}")
 MYSQL_APP_USER="zilch_user"
 MYSQL_APP_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-app-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}")
@@ -79,7 +80,7 @@ else
         -e MYSQL_DATABASE="$MYSQL_DATABASE" \
         -e MYSQL_USER="$MYSQL_APP_USER" \
         -e MYSQL_PASSWORD="$MYSQL_APP_PASSWORD" \
-        -p 3306:3306 \
+        -p "${MYSQL_PORT}:3306" \
         -v "$MYSQL_DATA_DIR/mysql":/var/lib/mysql \
         mysql:8.0 \
         --default-authentication-plugin=mysql_native_password \

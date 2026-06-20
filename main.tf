@@ -119,6 +119,12 @@ resource "random_password" "mysql_app_user" {
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
+resource "random_integer" "mysql_port" {
+  count = var.enable_mysql ? 1 : 0
+  min   = 30000
+  max   = 65535
+}
+
 # --- CLOUD RUN CONTAINER BLUEPRINT ORCHESTRATION ---
 
 resource "google_cloud_run_v2_service" "app" {
@@ -199,7 +205,7 @@ resource "google_cloud_run_v2_service" "app" {
       }
       env {
         name  = "ZILCH_MYSQL_PORT"
-        value = var.enable_mysql ? "3306" : ""
+        value = var.enable_mysql ? tostring(random_integer.mysql_port[0].result) : ""
       }
       env {
         name  = "ZILCH_MYSQL_DATABASE"
