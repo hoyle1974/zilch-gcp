@@ -786,6 +786,9 @@ import_resource() {
 
     if echo "$output" | grep -q "Successfully imported"; then
         return 0
+    elif echo "$output" | grep -q "Configuration for import target does not exist"; then
+        # Resource doesn't exist in Terraform config yet - will be created by apply
+        return 0
     else
         echo "$output"
         return 1
