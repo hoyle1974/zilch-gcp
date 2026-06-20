@@ -886,6 +886,141 @@ if gcloud artifacts repositories describe "${APP_NAME}-images" --location="${GCP
     fi
 fi
 
+# Service Account (app)
+if gcloud iam service-accounts describe "${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+    if ! is_in_terraform_state "google_service_account.app"; then
+        echo -e "${BLUE}→${NC} Found service account ${CYAN}${APP_NAME}${NC} in GCP but not in Terraform state"
+        if import_resource "google_service_account.app" "${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"; then
+            echo -e "${GREEN}✓${NC} Imported service account"
+        else
+            echo -e "${RED}✗${NC} Failed to import service account"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Service account already in Terraform state"
+    fi
+fi
+
+# Service Account (cloud_build)
+if gcloud iam service-accounts describe "${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+    if ! is_in_terraform_state "google_service_account.cloud_build"; then
+        echo -e "${BLUE}→${NC} Found Cloud Build service account ${CYAN}${APP_NAME}-builder${NC} in GCP but not in Terraform state"
+        if import_resource "google_service_account.cloud_build" "${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com"; then
+            echo -e "${GREEN}✓${NC} Imported Cloud Build service account"
+        else
+            echo -e "${RED}✗${NC} Failed to import Cloud Build service account"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Cloud Build service account already in Terraform state"
+    fi
+fi
+
+# Storage Bucket (app)
+if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then
+    APP_BUCKET="${APP_NAME}-storage-*"
+    EXISTING_BUCKET=$(gcloud storage buckets list --project="${PROJECT_ID}" --filter="name:${APP_NAME}-storage" --format="value(name)" 2>/dev/null | head -1)
+    if [ -n "$EXISTING_BUCKET" ]; then
+        if ! is_in_terraform_state "google_storage_bucket.app[0]"; then
+            echo -e "${BLUE}→${NC} Found storage bucket ${CYAN}${EXISTING_BUCKET}${NC} in GCP but not in Terraform state"
+            if import_resource "google_storage_bucket.app[0]" "$EXISTING_BUCKET"; then
+                echo -e "${GREEN}✓${NC} Imported storage bucket"
+            else
+                echo -e "${RED}✗${NC} Failed to import storage bucket"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Storage bucket already in Terraform state"
+        fi
+    fi
+fi
+
+# Storage Bucket (cloud_build_logs)
+if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
+    LOGS_BUCKET="${PROJECT_ID}_cloudbuild"
+    if gcloud storage buckets describe "gs://${LOGS_BUCKET}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_storage_bucket.cloud_build_logs[0]"; then
+            echo -e "${BLUE}→${NC} Found Cloud Build logs bucket ${CYAN}${LOGS_BUCKET}${NC} in GCP but not in Terraform state"
+            if import_resource "google_storage_bucket.cloud_build_logs[0]" "$LOGS_BUCKET"; then
+                echo -e "${GREEN}✓${NC} Imported Cloud Build logs bucket"
+            else
+                echo -e "${RED}✗${NC} Failed to import Cloud Build logs bucket"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Cloud Build logs bucket already in Terraform state"
+        fi
+    fi
+fi
+
+# BigQuery Dataset
+if [ "$ENABLE_BIGQUERY" == "true" ]; then
+    DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
+    if ! is_in_terraform_state "google_bigquery_dataset.app_analytics[0]"; then
+        if bq ls -d "$DATASET_ID" --project_id="$PROJECT_ID" &>/dev/null 2>&1; then
+            echo -e "${BLUE}→${NC} Found BigQuery dataset ${CYAN}${DATASET_ID}${NC} in GCP but not in Terraform state"
+            if import_resource "google_bigquery_dataset.app_analytics[0]" "$DATASET_ID"; then
+                echo -e "${GREEN}✓${NC} Imported BigQuery dataset"
+            else
+                echo -e "${RED}✗${NC} Failed to import BigQuery dataset"
+                exit 1
+            fi
+        fi
+    fi
+fi
+
+# Firestore Database
+if [ "$ENABLE_FIRESTORE" == "true" ]; then
+    if ! is_in_terraform_state "google_firestore_database.default[0]"; then
+        FIRESTORE_DB=$(gcloud firestore databases describe --database-id="(default)" --project="${PROJECT_ID}" 2>/dev/null | grep -E "name|uid" | head -1)
+        if [ -n "$FIRESTORE_DB" ]; then
+            echo -e "${BLUE}→${NC} Found Firestore database in GCP but not in Terraform state"
+            if import_resource "google_firestore_database.default[0]" "projects/${PROJECT_ID}/databases/(default)"; then
+                echo -e "${GREEN}✓${NC} Imported Firestore database"
+            else
+                echo -e "${RED}✗${NC} Failed to import Firestore database"
+                exit 1
+            fi
+        fi
+    fi
+fi
+
+# Pub/Sub Topic (budget alerts)
+if [ "$ENABLE_MONITORING" == "true" ]; then
+    BUDGET_TOPIC="${APP_NAME}-budget-alerts"
+    if gcloud pubsub topics describe "$BUDGET_TOPIC" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_pubsub_topic.budget_alerts[0]"; then
+            echo -e "${BLUE}→${NC} Found Pub/Sub topic ${CYAN}${BUDGET_TOPIC}${NC} in GCP but not in Terraform state"
+            if import_resource "google_pubsub_topic.budget_alerts[0]" "projects/${PROJECT_ID}/topics/${BUDGET_TOPIC}"; then
+                echo -e "${GREEN}✓${NC} Imported budget alerts Pub/Sub topic"
+            else
+                echo -e "${RED}✗${NC} Failed to import budget alerts Pub/Sub topic"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Budget alerts Pub/Sub topic already in Terraform state"
+        fi
+    fi
+fi
+
+# Secret Manager Secret
+if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then
+    EXAMPLE_SECRET="${APP_NAME}-example-secret"
+    if gcloud secrets describe "$EXAMPLE_SECRET" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_secret_manager_secret.example[0]"; then
+            echo -e "${BLUE}→${NC} Found Secret Manager secret ${CYAN}${EXAMPLE_SECRET}${NC} in GCP but not in Terraform state"
+            if import_resource "google_secret_manager_secret.example[0]" "$EXAMPLE_SECRET"; then
+                echo -e "${GREEN}✓${NC} Imported Secret Manager secret"
+            else
+                echo -e "${RED}✗${NC} Failed to import Secret Manager secret"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Secret Manager secret already in Terraform state"
+        fi
+    fi
+fi
+
 echo ""
 echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
