@@ -191,6 +191,23 @@ class TerraformExecutor:
         Returns:
             Output value or None if not found
         """
+        # Refresh state first to ensure outputs are available
+        refresh_cmd = [
+            "terraform",
+            "-chdir=" + str(self.working_dir),
+            "refresh",
+        ]
+        try:
+            subprocess.run(
+                refresh_cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,  # Don't fail if refresh has warnings
+            )
+        except Exception:
+            pass  # Continue even if refresh fails
+
         cmd = [
             "terraform",
             "-chdir=" + str(self.working_dir),
