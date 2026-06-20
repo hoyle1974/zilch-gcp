@@ -193,6 +193,38 @@ resource "google_cloud_run_v2_service" "app" {
         name  = "ZILCH_TRANSLATION_ENABLED"
         value = var.enable_translation ? "true" : ""
       }
+      env {
+        name  = "ZILCH_MYSQL_HOST"
+        value = var.enable_mysql ? google_compute_instance.mysql[0].network_interface[0].network_ip : ""
+      }
+      env {
+        name  = "ZILCH_MYSQL_PORT"
+        value = var.enable_mysql ? "3306" : ""
+      }
+      env {
+        name  = "ZILCH_MYSQL_DATABASE"
+        value = var.enable_mysql ? var.mysql_database_name : ""
+      }
+      env {
+        name  = "ZILCH_MYSQL_USER"
+        value = var.enable_mysql ? var.mysql_user : ""
+      }
+      env {
+        name  = "ZILCH_MYSQL_PASSWORD"
+        value = var.enable_mysql ? "sm://${google_secret_manager_secret.mysql_app_password[0].id}" : ""
+      }
+      env {
+        name  = "ZILCH_MYSQL_VM_NAME"
+        value = var.enable_mysql ? google_compute_instance.mysql[0].name : ""
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.gcp_project_id
+      }
+      env {
+        name  = "GCP_REGION"
+        value = var.gcp_region
+      }
     }
   }
 
@@ -206,7 +238,11 @@ resource "google_cloud_run_v2_service" "app" {
     ]
   }
 
-  depends_on = [google_project_service.run]
+  depends_on = [
+    google_project_service.run,
+    google_compute_instance.mysql,
+    google_secret_manager_secret_version.mysql_app_password,
+  ]
 }
 
 resource "google_cloud_run_service_iam_member" "public" {
