@@ -1,8 +1,12 @@
 """Interactive CLI prompts."""
 
-from typing import Optional
+import os
+import sys
+from typing import Dict, List, Optional
 
 import click
+from rich.console import Console
+from rich.style import Style
 
 from config import ZilchConfig
 from output import info, section
@@ -88,109 +92,6 @@ def get_region(config: ZilchConfig) -> str:
     return region_map.get(choice, "us-central1")
 
 
-def get_services(config: ZilchConfig) -> ZilchConfig:
-    """Interactive service menu.
-
-    Args:
-        config: Current config
-
-    Returns:
-        Updated config with service choices
-    """
-    section("Services Configuration")
-    click.echo("Answer yes/no for each service (descriptions below)")
-    click.echo()
-
-    # Service descriptions
-    descriptions = {
-        "firestore": ("Firestore", "NoSQL: document storage, real-time sync"),
-        "cloud_storage": (
-            "Cloud Storage",
-            "Files: user uploads, media, large files",
-        ),
-        "secret_manager": ("Secret Manager", "Secrets: API keys, passwords, config"),
-        "firebase_auth": ("Firebase Auth", "User login, social auth"),
-        "vertex_ai": ("Vertex AI", "ML: predictions, model training"),
-        "pubsub": ("Pub/Sub", "Event streaming: async messaging"),
-        "cloud_tasks": ("Cloud Tasks", "Task queue: distributed work"),
-        "bigquery": ("BigQuery", "Data warehouse: SQL on big data"),
-        "cloud_kms": ("Cloud KMS", "Key management: encryption"),
-        "vision_ai": ("Vision AI", "Image: OCR, object detection"),
-        "speech_to_text": ("Speech-to-Text", "Audio: recognition, transcription"),
-        "translation": ("Translation", "Languages: multi-language text"),
-        "scheduler": ("Cloud Scheduler", "Cron jobs: periodic tasks"),
-        "monitoring": ("Cloud Monitoring", "Alerts, budgets, logs"),
-        "mysql": ("MySQL Database", "Relational: SQL, complex queries"),
-    }
-
-    click.echo(click.style("Data & Storage", bold=True))
-    config.enable_firestore = prompt_toggle("  Firestore", config.enable_firestore)
-    config.enable_cloud_storage = prompt_toggle(
-        "  Cloud Storage", config.enable_cloud_storage
-    )
-    config.enable_secret_manager = prompt_toggle(
-        "  Secret Manager", config.enable_secret_manager
-    )
-
-    click.echo()
-    click.echo(click.style("Authentication & AI", bold=True))
-    config.enable_firebase_auth = prompt_toggle(
-        "  Firebase Auth", config.enable_firebase_auth
-    )
-    config.enable_vertex_ai = prompt_toggle("  Vertex AI", config.enable_vertex_ai)
-
-    click.echo()
-    click.echo(click.style("Build & Messaging", bold=True))
-    # Cloud Build is always available (skip toggling)
-    config.enable_pubsub = prompt_toggle("  Pub/Sub", config.enable_pubsub)
-    config.enable_cloud_tasks = prompt_toggle(
-        "  Cloud Tasks", config.enable_cloud_tasks
-    )
-
-    click.echo()
-    click.echo(click.style("Data & Analytics", bold=True))
-    config.enable_bigquery = prompt_toggle("  BigQuery", config.enable_bigquery)
-
-    click.echo()
-    click.echo(click.style("Security & Encryption", bold=True))
-    config.enable_cloud_kms = prompt_toggle("  Cloud KMS", config.enable_cloud_kms)
-
-    click.echo()
-    click.echo(click.style("AI Services", bold=True))
-    config.enable_vision_ai = prompt_toggle("  Vision AI", config.enable_vision_ai)
-    config.enable_speech_to_text = prompt_toggle(
-        "  Speech-to-Text", config.enable_speech_to_text
-    )
-    config.enable_translation = prompt_toggle(
-        "  Translation", config.enable_translation
-    )
-
-    click.echo()
-    click.echo(click.style("Operations", bold=True))
-    config.enable_scheduler = prompt_toggle(
-        "  Cloud Scheduler", config.enable_scheduler
-    )
-    config.enable_monitoring = prompt_toggle(
-        "  Cloud Monitoring", config.enable_monitoring
-    )
-    config.enable_mysql = prompt_toggle("  MySQL Database", config.enable_mysql)
-
-    # Show summary
-    click.echo()
-    section("Selected Services")
-    enabled = []
-    for key, (name, _) in descriptions.items():
-        key_with_underscores = key.replace("-", "_")
-        if getattr(config, f"enable_{key_with_underscores}", False):
-            enabled.append(name)
-
-    for service in enabled:
-        click.echo(f"  ✓ {service}")
-
-    click.echo()
-    return config
-
-
 def prompt_toggle(feature_name: str, current_value: bool) -> bool:
     """Prompt for yes/no toggle.
 
@@ -205,6 +106,165 @@ def prompt_toggle(feature_name: str, current_value: bool) -> bool:
     status = click.style("[enabled]", fg="green") if current_value else click.style("[disabled]", fg="cyan")
     result = click.confirm(f"{feature_name}? {status}", default=current_value, show_default=False)
     return result
+
+
+def _build_service_list(config: ZilchConfig) -> List[Dict[str, str | bool]]:
+    """Build list of services with current config state.
+
+    Args:
+        config: Current config
+
+    Returns:
+        List of dicts with keys: key, name, enabled
+    """
+    services = [
+        {"key": "firestore", "name": "Firestore", "enabled": config.enable_firestore},
+        {"key": "cloud_storage", "name": "Cloud Storage", "enabled": config.enable_cloud_storage},
+        {"key": "secret_manager", "name": "Secret Manager", "enabled": config.enable_secret_manager},
+        {"key": "firebase_auth", "name": "Firebase Auth", "enabled": config.enable_firebase_auth},
+        {"key": "vertex_ai", "name": "Vertex AI", "enabled": config.enable_vertex_ai},
+        {"key": "pubsub", "name": "Pub/Sub", "enabled": config.enable_pubsub},
+        {"key": "cloud_tasks", "name": "Cloud Tasks", "enabled": config.enable_cloud_tasks},
+        {"key": "bigquery", "name": "BigQuery", "enabled": config.enable_bigquery},
+        {"key": "cloud_kms", "name": "Cloud KMS", "enabled": config.enable_cloud_kms},
+        {"key": "vision_ai", "name": "Vision AI", "enabled": config.enable_vision_ai},
+        {"key": "speech_to_text", "name": "Speech-to-Text", "enabled": config.enable_speech_to_text},
+        {"key": "translation", "name": "Translation", "enabled": config.enable_translation},
+        {"key": "scheduler", "name": "Cloud Scheduler", "enabled": config.enable_scheduler},
+        {"key": "monitoring", "name": "Cloud Monitoring", "enabled": config.enable_monitoring},
+        {"key": "cloud_build", "name": "Cloud Build", "enabled": config.enable_cloud_build},
+        {"key": "mysql", "name": "MySQL Database", "enabled": config.enable_mysql},
+    ]
+    return services
+
+
+def _apply_services_to_config(services: List[Dict[str, str | bool]], config: ZilchConfig) -> None:
+    """Apply service selections back to config object.
+
+    Args:
+        services: List of service dicts with enabled state
+        config: Config object to update (modified in-place)
+    """
+    for service in services:
+        key = service["key"]
+        enabled = service["enabled"]
+        attr_name = f"enable_{key}"
+        setattr(config, attr_name, enabled)
+
+
+def _render_menu(console: Console, services: List[Dict[str, str | bool]], current_index: int) -> None:
+    """Render the service menu.
+
+    Args:
+        console: Rich console for output
+        services: List of service dicts
+        current_index: Index of currently selected service
+    """
+    console.clear()
+    section("Services Configuration")
+    click.echo("Use arrow keys to navigate, space to toggle, enter to confirm")
+    click.echo()
+
+    for i, service in enumerate(services):
+        checkbox = "[x]" if service["enabled"] else "[ ]"
+        name = service["name"]
+
+        if i == current_index:
+            style = Style(color="cyan", bold=True, reverse=True)
+            line = f"{checkbox} {name}"
+            console.print(line, style=style)
+        else:
+            click.echo(f"{checkbox} {name}")
+
+
+def _get_key() -> str:
+    """Read a single key from stdin.
+
+    Returns:
+        Key string: 'up', 'down', 'space', 'enter', or the raw character
+    """
+    if os.name == 'nt':  # Windows
+        import msvcrt
+        key = msvcrt.getch()
+        if key == b'\xe0':  # Arrow key prefix on Windows
+            next_key = msvcrt.getch()
+            if next_key == b'H':
+                return 'up'
+            elif next_key == b'P':
+                return 'down'
+        elif key == b' ':
+            return 'space'
+        elif key == b'\r':
+            return 'enter'
+    else:  # Unix/Linux/Mac
+        import tty
+        import termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+            if ch == '\x1b':  # Escape sequence
+                sys.stdin.read(1)  # Skip '['
+                ch = sys.stdin.read(1)
+                if ch == 'A':
+                    return 'up'
+                elif ch == 'B':
+                    return 'down'
+            elif ch == ' ':
+                return 'space'
+            elif ch == '\r':
+                return 'enter'
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    return 'unknown'
+
+
+def get_services_interactive(config: ZilchConfig) -> ZilchConfig:
+    """Interactive service selection menu.
+
+    Args:
+        config: Current config
+
+    Returns:
+        Updated config with service choices
+    """
+    section("Services Configuration")
+
+    services = _build_service_list(config)
+    current_index = 0
+    console = Console()
+
+    while True:
+        _render_menu(console, services, current_index)
+
+        key = _get_key()
+
+        if key == 'down':
+            current_index = (current_index + 1) % len(services)
+        elif key == 'up':
+            current_index = (current_index - 1) % len(services)
+        elif key == 'space':
+            services[current_index]["enabled"] = not services[current_index]["enabled"]
+        elif key == 'enter':
+            break
+
+    # Apply selections to config
+    _apply_services_to_config(services, config)
+
+    # Show summary
+    console.clear()
+    section("Selected Services")
+    enabled = [s["name"] for s in services if s["enabled"]]
+    if enabled:
+        for service in enabled:
+            click.echo(f"  ✓ {service}")
+    else:
+        click.echo("  (no services selected)")
+    click.echo()
+
+    return config
 
 
 def get_monitoring_config(config: ZilchConfig) -> ZilchConfig:
