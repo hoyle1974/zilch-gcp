@@ -96,7 +96,7 @@ def deploy(auto: bool, dry_run: bool, verbose: bool) -> None:
 
         # Interactive service menu (unless auto mode)
         if not auto:
-            config = cli.get_services(config)
+            config = cli.get_services_interactive(config)
 
         # Firestore permissions check
         if config.enable_firestore:
