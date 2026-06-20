@@ -191,23 +191,6 @@ class TerraformExecutor:
         Returns:
             Output value or None if not found
         """
-        # Refresh state first to ensure outputs are available
-        refresh_cmd = [
-            "terraform",
-            "-chdir=" + str(self.working_dir),
-            "refresh",
-        ]
-        try:
-            subprocess.run(
-                refresh_cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,  # Don't fail if refresh has warnings
-            )
-        except Exception:
-            pass  # Continue even if refresh fails
-
         cmd = [
             "terraform",
             "-chdir=" + str(self.working_dir),
@@ -222,11 +205,15 @@ class TerraformExecutor:
                 capture_output=True,
                 text=True,
                 timeout=30,
-                check=True,
+                check=False,  # Don't fail on warnings
                 cwd=str(self.working_dir),
             )
-            return result.stdout.strip()
-        except subprocess.CalledProcessError:
+            # Check if output is an error message
+            if "Warning:" in result.stdout or "Error:" in result.stdout or result.returncode != 0:
+                return None
+            output = result.stdout.strip()
+            return output if output else None
+        except Exception:
             return None
 
     def import_resource(
