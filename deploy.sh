@@ -779,7 +779,9 @@ TF_APPLY_RETRIES=0
 TF_MAX_APPLY_RETRIES=2
 
 while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
-    TF_APPLY_OUTPUT=$(terraform -chdir="$(dirname "$0")" apply -auto-approve \
+    # Use tee to display output in real-time while capturing it for error detection
+    TF_TEMP_OUTPUT="/tmp/tf_apply_$$.log"
+    terraform -chdir="$(dirname "$0")" apply -auto-approve \
       -var="gcp_project_id=${PROJECT_ID}" \
       -var="app_name=${APP_NAME}" \
       -var="gcp_region=${GCP_REGION}" \
@@ -806,9 +808,13 @@ while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
       -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
       -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
       -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-      -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" 2>&1)
+      -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" 2>&1 | tee "$TF_TEMP_OUTPUT"
 
-    if [ $? -eq 0 ]; then
+    TF_EXIT_CODE=$?
+    TF_APPLY_OUTPUT=$(cat "$TF_TEMP_OUTPUT")
+    rm -f "$TF_TEMP_OUTPUT"
+
+    if [ $TF_EXIT_CODE -eq 0 ]; then
         TF_APPLY_SUCCESS=true
         break
     fi
