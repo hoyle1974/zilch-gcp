@@ -116,15 +116,15 @@ class TerraformExecutor:
         except subprocess.CalledProcessError as e:
             raise TerraformError(f"Terraform apply failed: {e.stderr}")
 
-    def destroy(self, vars_dict: Dict[str, str], force: bool = False) -> None:
+    def destroy(self, vars_dict: Dict[str, str], force: bool = False) -> bool:
         """Destroy Terraform infrastructure.
 
         Args:
             vars_dict: Dictionary of Terraform variables
             force: Skip confirmation
 
-        Raises:
-            TerraformError: If destroy fails
+        Returns:
+            True if destroy succeeded, False if it had errors (but may have partially succeeded)
         """
         # Build variable arguments
         var_args = []
@@ -145,16 +145,22 @@ class TerraformExecutor:
 
         cmd.extend(var_args)
 
+        info("Running terraform destroy...")
         try:
-            subprocess.run(
+            result = subprocess.run(
                 cmd,
                 timeout=600,  # 10 minutes
-                check=True,
+                check=False,  # Don't fail on non-zero exit - allow cleanup to continue
                 cwd=str(self.working_dir),
             )
-            success("Infrastructure destroyed")
-        except subprocess.CalledProcessError as e:
-            raise TerraformError(f"Terraform destroy failed: {e.stderr}")
+            if result.returncode == 0:
+                success("Infrastructure destroyed")
+                return True
+            else:
+                warning("Terraform destroy completed with warnings/errors (continuing cleanup)")
+                return False
+        except subprocess.TimeoutExpired:
+            raise TerraformError("Terraform destroy timed out")
 
     def list_resources(self) -> List[str]:
         """List Terraform state resources.

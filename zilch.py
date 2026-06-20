@@ -246,10 +246,11 @@ def teardown(force: bool) -> None:
 
         try:
             tf = TerraformExecutor(str(script_dir))
-            tf.destroy(config.to_terraform_vars(), force=True)
-            success("Resources destroyed")
+            success_flag = tf.destroy(config.to_terraform_vars(), force=True)
+            if not success_flag:
+                warning("Terraform destroy had issues (continuing with manual cleanup)")
         except TerraformError as e:
-            warning(f"Terraform destroy had issues (continuing with manual cleanup): {e}")
+            warning(f"Terraform destroy failed: {e} (continuing with manual cleanup)")
 
         # Manual cleanup of resources that might not be terraform-managed
         section("Manual Cleanup")
