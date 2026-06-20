@@ -31,6 +31,10 @@ def deploy(auto: bool) -> None:
     and optional services like Firestore, Secret Manager, etc.
     """
     try:
+        # Change to script directory so we can find config and terraform files
+        script_dir = Path(__file__).parent.absolute()
+        os.chdir(script_dir)
+
         section("Zilch GCP Infrastructure Deployment")
         if auto:
             click.echo(cyan("(auto mode - using config defaults)"))
@@ -166,6 +170,10 @@ def teardown(force: bool) -> None:
     the remote state bucket.
     """
     try:
+        # Change to script directory so we can find config and terraform files
+        script_dir = Path(__file__).parent.absolute()
+        os.chdir(script_dir)
+
         section("Zilch Infrastructure Teardown")
         click.echo(click.style("⚠️  WARNING: This action is IRREVERSIBLE", fg="red"))
         click.echo()
