@@ -400,37 +400,6 @@ resource "google_project_iam_member" "cloud_tasks_enqueuer" {
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
-# Enable Cloud Scheduler API
-resource "google_project_service" "cloud_scheduler" {
-  count   = var.enable_scheduler ? 1 : 0
-  service = "cloudscheduler.googleapis.com"
-  project = var.gcp_project_id
-
-  disable_on_destroy = false
-}
-
-# Cloud Scheduler job for periodic tasks
-resource "google_cloud_scheduler_job" "app_cron" {
-  count       = var.enable_scheduler ? 1 : 0
-  depends_on  = [google_project_service.cloud_scheduler[0]]
-
-  name        = "${var.app_name}-cron"
-  description = "Periodic scheduler job for ${var.app_name}"
-  schedule    = var.scheduler_schedule
-  time_zone   = var.scheduler_timezone
-  region      = var.gcp_region
-  project     = var.gcp_project_id
-
-  http_target {
-    http_method = "POST"
-    uri         = "${local.cloud_run_url}${var.scheduler_endpoint}"
-
-    oidc_token {
-      service_account_email = google_service_account.app.email
-    }
-  }
-}
-
 # Enable BigQuery API
 resource "google_project_service" "bigquery" {
   count   = var.enable_bigquery ? 1 : 0
