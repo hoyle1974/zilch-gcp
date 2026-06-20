@@ -541,6 +541,13 @@ def _reconcile_state(tf: TerraformExecutor, config: ZilchConfig) -> None:
                 "KMS KeyRing",
             )
         )
+        resources.append(
+            (
+                "google_kms_crypto_key.app_key[0]",
+                f"projects/{config.gcp_project_id}/locations/{config.gcp_region}/keyRings/{config.app_name}-keyring/cryptoKeys/{config.app_name}-key",
+                "KMS CryptoKey",
+            )
+        )
 
     importer = ParallelImporter(tf)
     importer.import_all(resources, config.to_terraform_vars())
