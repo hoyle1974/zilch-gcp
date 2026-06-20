@@ -41,9 +41,15 @@ APP_NAME=""
 
 if [ -f ".zilch.config" ]; then
     echo "📋 Reading .zilch.config..."
-    source .zilch.config
-    [ -n "$gcp_project_id" ] && PROJECT_ID="$gcp_project_id"
-    [ -n "$app_name" ] && APP_NAME="$app_name"
+    # Parse config file safely without executing code
+    while IFS='=' read -r key value; do
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [ "$key" = "gcp_project_id" ] && PROJECT_ID="$value"
+        [ "$key" = "app_name" ] && APP_NAME="$value"
+    done < .zilch.config
 fi
 
 # If not found in config, prompt
