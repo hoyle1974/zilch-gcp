@@ -38,6 +38,7 @@ echo "✓ Authenticated as: ${CURRENT_USER}"
 
 PROJECT_ID=""
 APP_NAME=""
+GCP_REGION="us-central1"
 GCP_BILLING_ACCOUNT_ID=""
 
 if [ -f ".zilch.config" ]; then
@@ -50,6 +51,7 @@ if [ -f ".zilch.config" ]; then
         value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         [ "$key" = "gcp_project_id" ] && PROJECT_ID="$value"
         [ "$key" = "app_name" ] && APP_NAME="$value"
+        [ "$key" = "gcp_region" ] && GCP_REGION="$value"
         [ "$key" = "gcp_billing_account_id" ] && GCP_BILLING_ACCOUNT_ID="$value"
     done < .zilch.config
 fi
@@ -124,7 +126,7 @@ export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 if ! terraform -chdir="$(dirname "$0")" destroy -auto-approve \
     -var="gcp_project_id=${PROJECT_ID}" \
     -var="app_name=${APP_NAME}" \
-    -var="gcp_region=us-central1" \
+    -var="gcp_region=${GCP_REGION}" \
     -var="github_owner=" \
     -var="github_repo=" \
     -var="enable_cloud_build=false" \
@@ -187,8 +189,8 @@ gcloud pubsub subscriptions list --project="$PROJECT_ID" --filter="name:${APP_NA
 done
 
 echo "  Deleting BigQuery datasets..."
-gcloud bq datasets list --project_id="$PROJECT_ID" --filter="name:$(echo ${APP_NAME} | tr '-' '_')" --format="get(name)" 2>/dev/null | while read -r dataset; do
-    [ -n "$dataset" ] && gcloud bq datasets delete --dataset_id="$dataset" --project_id="$PROJECT_ID" --quiet 2>/dev/null || true
+gcloud bigquery datasets list --project="$PROJECT_ID" --filter="name:$(echo ${APP_NAME} | tr '-' '_')" --format="value(name)" 2>/dev/null | while read -r dataset; do
+    [ -n "$dataset" ] && gcloud bigquery datasets delete --dataset="$dataset" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 done
 
 echo "  Deleting secrets..."
@@ -196,7 +198,7 @@ gcloud secrets list --project="$PROJECT_ID" --filter="name:${APP_NAME}" --format
     [ -n "$secret" ] && gcloud secrets delete "$secret" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 done
 
-echo "  Deleting KMS keyrings..."
+echo "  Deleting KMS keyrings (30-day scheduled deletion)..."
 gcloud kms keyrings list --location=us-central1 --project="$PROJECT_ID" --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r keyring; do
     [ -n "$keyring" ] && gcloud kms keyrings delete "$keyring" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
 done
