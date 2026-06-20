@@ -100,6 +100,25 @@ resource "random_id" "kms_suffix" {
   byte_length = 2
 }
 
+resource "random_id" "mysql_suffix" {
+  count       = var.enable_mysql ? 1 : 0
+  byte_length = 2
+}
+
+resource "random_password" "mysql_root" {
+  count            = var.enable_mysql ? 1 : 0
+  length           = var.mysql_root_password_length
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "random_password" "mysql_app_user" {
+  count            = var.enable_mysql ? 1 : 0
+  length           = var.mysql_root_password_length
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
 # --- CLOUD RUN CONTAINER BLUEPRINT ORCHESTRATION ---
 
 resource "google_cloud_run_v2_service" "app" {
