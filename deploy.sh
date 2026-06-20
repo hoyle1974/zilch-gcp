@@ -617,7 +617,11 @@ if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
         echo "  2. Select ${GITHUB_OWNER}/${GITHUB_REPO}"
         echo "  3. Authorize the Cloud Build GitHub App"
         echo ""
-        read -p "Press ENTER once connected (or Terraform will create it)..."
+        if [ "$AUTO_MODE" = false ]; then
+            read -p "Press ENTER once connected (or Terraform will create it)..."
+        else
+            echo "(auto mode - skipping GitHub prompt, Terraform will create trigger)"
+        fi
     fi
 fi
 
