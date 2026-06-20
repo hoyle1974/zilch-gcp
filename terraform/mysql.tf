@@ -120,3 +120,57 @@ resource "google_compute_firewall" "mysql_ssh" {
   source_ranges = ["0.0.0.0/0"]
   target_tags   = [local.mysql_network_tag]
 }
+
+# Secret for MySQL root password
+resource "google_secret_manager_secret" "mysql_root_password" {
+  count     = var.enable_mysql ? 1 : 0
+  secret_id = "zilch-mysql-root-password-${local.mysql_resource_suffix}"
+  project   = var.gcp_project_id
+
+  replication {
+    automatic = true
+  }
+
+  labels = local.mysql_labels
+}
+
+resource "google_secret_manager_secret_version" "mysql_root_password" {
+  count       = var.enable_mysql ? 1 : 0
+  secret      = google_secret_manager_secret.mysql_root_password[0].id
+  secret_data = random_password.mysql_root[0].result
+}
+
+# Secret for MySQL application user password
+resource "google_secret_manager_secret" "mysql_app_password" {
+  count     = var.enable_mysql ? 1 : 0
+  secret_id = "zilch-mysql-app-password-${local.mysql_resource_suffix}"
+  project   = var.gcp_project_id
+
+  replication {
+    automatic = true
+  }
+
+  labels = local.mysql_labels
+}
+
+resource "google_secret_manager_secret_version" "mysql_app_password" {
+  count       = var.enable_mysql ? 1 : 0
+  secret      = google_secret_manager_secret.mysql_app_password[0].id
+  secret_data = random_password.mysql_app_user[0].result
+}
+
+# IAM: Allow Cloud Run service account to read MySQL password
+resource "google_secret_manager_secret_iam_member" "mysql_app_password_accessor" {
+  count     = var.enable_mysql ? 1 : 0
+  secret_id = google_secret_manager_secret.mysql_app_password[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.app.email}"
+}
+
+# IAM: Allow MySQL VM service account to read root password
+resource "google_secret_manager_secret_iam_member" "mysql_root_password_accessor" {
+  count     = var.enable_mysql ? 1 : 0
+  secret_id = google_secret_manager_secret.mysql_root_password[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mysql[0].email}"
+}
