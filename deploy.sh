@@ -843,6 +843,86 @@ while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
             sleep 3
             continue
         fi
+    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Error creating Job: googleapi: Error 409.*Resource.*already exists"; then
+        echo -e "${YELLOW}⚠${NC} Detected existing Cloud Scheduler Job"
+        echo -e "${BLUE}→${NC} Attempting to import existing job into Terraform state"
+
+        if terraform -chdir="$(dirname "$0")" import \
+            -var="gcp_project_id=${PROJECT_ID}" \
+            -var="app_name=${APP_NAME}" \
+            -var="gcp_region=${GCP_REGION}" \
+            "google_cloud_scheduler_job.app_cron[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/jobs/${APP_NAME}-cron" 2>&1 | grep -q "Successfully imported"; then
+            echo -e "${GREEN}✓${NC} Cloud Scheduler Job imported, retrying deployment"
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 2
+            continue
+        else
+            echo -e "${YELLOW}⚠${NC} Could not import Cloud Scheduler Job, attempting fallback delete"
+            gcloud scheduler jobs delete "${APP_NAME}-cron" --location="${GCP_REGION}" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 3
+            continue
+        fi
+    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Resource already exists in the project.*topics/"; then
+        echo -e "${YELLOW}⚠${NC} Detected existing Pub/Sub Topic"
+        echo -e "${BLUE}→${NC} Attempting to import existing topic into Terraform state"
+
+        if terraform -chdir="$(dirname "$0")" import \
+            -var="gcp_project_id=${PROJECT_ID}" \
+            -var="app_name=${APP_NAME}" \
+            -var="gcp_region=${GCP_REGION}" \
+            "google_pubsub_topic.app_events[0]" "projects/${PROJECT_ID}/topics/${APP_NAME}-events" 2>&1 | grep -q "Successfully imported"; then
+            echo -e "${GREEN}✓${NC} Pub/Sub Topic imported, retrying deployment"
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 2
+            continue
+        else
+            echo -e "${YELLOW}⚠${NC} Could not import Pub/Sub Topic, attempting fallback delete"
+            gcloud pubsub topics delete "${APP_NAME}-events" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 3
+            continue
+        fi
+    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Resource already exists in the project.*subscriptions/"; then
+        echo -e "${YELLOW}⚠${NC} Detected existing Pub/Sub Subscription"
+        echo -e "${BLUE}→${NC} Attempting to import existing subscription into Terraform state"
+
+        if terraform -chdir="$(dirname "$0")" import \
+            -var="gcp_project_id=${PROJECT_ID}" \
+            -var="app_name=${APP_NAME}" \
+            -var="gcp_region=${GCP_REGION}" \
+            "google_pubsub_subscription.app_events_sub[0]" "projects/${PROJECT_ID}/subscriptions/${APP_NAME}-events-subscription" 2>&1 | grep -q "Successfully imported"; then
+            echo -e "${GREEN}✓${NC} Pub/Sub Subscription imported, retrying deployment"
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 2
+            continue
+        else
+            echo -e "${YELLOW}⚠${NC} Could not import Pub/Sub Subscription, attempting fallback delete"
+            gcloud pubsub subscriptions delete "${APP_NAME}-events-subscription" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 3
+            continue
+        fi
+    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Resource.*repositories/.*already exists"; then
+        echo -e "${YELLOW}⚠${NC} Detected existing Artifact Registry Repository"
+        echo -e "${BLUE}→${NC} Attempting to import existing repository into Terraform state"
+
+        if terraform -chdir="$(dirname "$0")" import \
+            -var="gcp_project_id=${PROJECT_ID}" \
+            -var="app_name=${APP_NAME}" \
+            -var="gcp_region=${GCP_REGION}" \
+            "google_artifact_registry_repository.app_images[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/repositories/${APP_NAME}-images" 2>&1 | grep -q "Successfully imported"; then
+            echo -e "${GREEN}✓${NC} Artifact Registry Repository imported, retrying deployment"
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 2
+            continue
+        else
+            echo -e "${YELLOW}⚠${NC} Could not import Artifact Registry Repository, attempting fallback delete"
+            gcloud artifacts repositories delete "${APP_NAME}-images" --location="${GCP_REGION}" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 3
+            continue
+        fi
     fi
 
     # If not a recoverable error, fail
