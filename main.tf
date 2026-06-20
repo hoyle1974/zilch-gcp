@@ -201,7 +201,7 @@ resource "google_cloud_run_v2_service" "app" {
       }
       env {
         name  = "ZILCH_MYSQL_HOST"
-        value = var.enable_mysql ? google_compute_instance.mysql[0].network_interface[0].network_ip : ""
+        value = var.enable_mysql ? google_compute_address.mysql[0].address : ""
       }
       env {
         name  = "ZILCH_MYSQL_PORT"
