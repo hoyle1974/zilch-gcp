@@ -6,7 +6,6 @@ from typing import Dict, List, Optional
 
 import click
 from rich.console import Console
-from rich.style import Style
 
 from config import ZilchConfig
 from output import info, section
@@ -169,13 +168,13 @@ def _render_menu(console: Console, services: List[Dict[str, str | bool]], curren
         checkbox = "[x]" if service["enabled"] else "[ ]"
         name = service["name"]
         cursor = "→ " if i == current_index else "  "
+        line = f"{cursor}{checkbox} {name}"
 
         if i == current_index:
-            style = Style(color="cyan", bold=True)
-            line = f"{cursor}{checkbox} {name}"
-            console.print(line, style=style)
+            styled_line = click.style(line, fg="cyan", bold=True)
+            click.echo(styled_line)
         else:
-            click.echo(f"{cursor}{checkbox} {name}")
+            click.echo(line)
 
 
 def _get_key() -> str:
