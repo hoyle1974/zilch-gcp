@@ -116,6 +116,9 @@ gcloud config set project "$PROJECT_ID" --quiet
 echo "🚀 Running terraform destroy..."
 echo ""
 
+# Export quota project for billing API access in Terraform
+export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
+
 if ! terraform -chdir="$(dirname "$0")" destroy -auto-approve \
     -var="gcp_project_id=${PROJECT_ID}" \
     -var="app_name=${APP_NAME}" \
