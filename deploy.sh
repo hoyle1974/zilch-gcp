@@ -764,192 +764,144 @@ if [ "$TF_INIT_SUCCESS" = false ]; then
 fi
 echo -e "${GREEN}✓${NC} Init complete"
 
-# Note: Firestore, Scheduler, and Monitoring require special permissions/setup
-# They're disabled by default. Users can enable them individually if they have the requirements.
+# State Reconciliation: Check for pre-existing resources and import if needed
+echo ""
+echo -e "${BOLD}State Reconciliation${NC}"
 
+is_in_terraform_state() {
+    local resource_path=$1
+    terraform -chdir="$(dirname "$0")" state list "$resource_path" &>/dev/null
+}
+
+import_resource() {
+    local resource_type=$1
+    local resource_id=$2
+
+    terraform -chdir="$(dirname "$0")" import \
+        -var="gcp_project_id=${PROJECT_ID}" \
+        -var="app_name=${APP_NAME}" \
+        -var="gcp_region=${GCP_REGION}" \
+        "${resource_type}" "${resource_id}" 2>&1 | grep -q "Successfully imported"
+}
+
+# BigQuery Dataset
+if [ "$ENABLE_BIGQUERY" == "true" ]; then
+    DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
+    if bq ls -d "$DATASET_ID" --project_id="$PROJECT_ID" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_bigquery_dataset.app_analytics[0]"; then
+            echo -e "${BLUE}→${NC} Found BigQuery dataset ${CYAN}${DATASET_ID}${NC} in GCP but not in Terraform state"
+            if import_resource "google_bigquery_dataset.app_analytics[0]" "$DATASET_ID"; then
+                echo -e "${GREEN}✓${NC} Imported BigQuery dataset"
+            else
+                echo -e "${RED}✗${NC} Failed to import BigQuery dataset"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} BigQuery dataset already in Terraform state"
+        fi
+    fi
+fi
+
+# Cloud Scheduler Job
+if [ "$ENABLE_SCHEDULER" == "true" ]; then
+    if gcloud scheduler jobs describe "${APP_NAME}-cron" --location="${GCP_REGION}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_cloud_scheduler_job.app_cron[0]"; then
+            echo -e "${BLUE}→${NC} Found Cloud Scheduler job ${CYAN}${APP_NAME}-cron${NC} in GCP but not in Terraform state"
+            if import_resource "google_cloud_scheduler_job.app_cron[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/jobs/${APP_NAME}-cron"; then
+                echo -e "${GREEN}✓${NC} Imported Cloud Scheduler job"
+            else
+                echo -e "${RED}✗${NC} Failed to import Cloud Scheduler job"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Cloud Scheduler job already in Terraform state"
+        fi
+    fi
+fi
+
+# Pub/Sub Topic
+if [ "$ENABLE_PUBSUB" == "true" ]; then
+    if gcloud pubsub topics describe "${APP_NAME}-events" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_pubsub_topic.app_events[0]"; then
+            echo -e "${BLUE}→${NC} Found Pub/Sub topic ${CYAN}${APP_NAME}-events${NC} in GCP but not in Terraform state"
+            if import_resource "google_pubsub_topic.app_events[0]" "projects/${PROJECT_ID}/topics/${APP_NAME}-events"; then
+                echo -e "${GREEN}✓${NC} Imported Pub/Sub topic"
+            else
+                echo -e "${RED}✗${NC} Failed to import Pub/Sub topic"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Pub/Sub topic already in Terraform state"
+        fi
+    fi
+fi
+
+# Pub/Sub Subscription
+if [ "$ENABLE_PUBSUB" == "true" ]; then
+    if gcloud pubsub subscriptions describe "${APP_NAME}-events-subscription" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_pubsub_subscription.app_events_sub[0]"; then
+            echo -e "${BLUE}→${NC} Found Pub/Sub subscription ${CYAN}${APP_NAME}-events-subscription${NC} in GCP but not in Terraform state"
+            if import_resource "google_pubsub_subscription.app_events_sub[0]" "projects/${PROJECT_ID}/subscriptions/${APP_NAME}-events-subscription"; then
+                echo -e "${GREEN}✓${NC} Imported Pub/Sub subscription"
+            else
+                echo -e "${RED}✗${NC} Failed to import Pub/Sub subscription"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Pub/Sub subscription already in Terraform state"
+        fi
+    fi
+fi
+
+# Artifact Registry Repository
+if gcloud artifacts repositories describe "${APP_NAME}-images" --location="${GCP_REGION}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+    if ! is_in_terraform_state "google_artifact_registry_repository.app_images[0]"; then
+        echo -e "${BLUE}→${NC} Found Artifact Registry repository ${CYAN}${APP_NAME}-images${NC} in GCP but not in Terraform state"
+        if import_resource "google_artifact_registry_repository.app_images[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/repositories/${APP_NAME}-images"; then
+            echo -e "${GREEN}✓${NC} Imported Artifact Registry repository"
+        else
+            echo -e "${RED}✗${NC} Failed to import Artifact Registry repository"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Artifact Registry repository already in Terraform state"
+    fi
+fi
+
+echo ""
 echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
 export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 
-# Terraform apply will refresh state automatically, so we don't need a separate refresh step
-# But we do need retry logic for "already exists" errors on redeploy
+terraform -chdir="$(dirname "$0")" apply -auto-approve \
+  -var="gcp_project_id=${PROJECT_ID}" \
+  -var="app_name=${APP_NAME}" \
+  -var="gcp_region=${GCP_REGION}" \
+  -var="github_owner=${GITHUB_OWNER:-}" \
+  -var="github_repo=${GITHUB_REPO:-}" \
+  -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
+  -var="enable_firestore=${ENABLE_FIRESTORE}" \
+  -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
+  -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
+  -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
+  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
+  -var="enable_pubsub=${ENABLE_PUBSUB}" \
+  -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
+  -var="enable_bigquery=${ENABLE_BIGQUERY}" \
+  -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
+  -var="enable_vision_ai=${ENABLE_VISION_AI}" \
+  -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
+  -var="enable_translation=${ENABLE_TRANSLATION}" \
+  -var="enable_scheduler=${ENABLE_SCHEDULER}" \
+  -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
+  -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
+  -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
+  -var="enable_monitoring=${ENABLE_MONITORING}" \
+  -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
+  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
+  -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
+  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" || exit 1
 
-TF_APPLY_SUCCESS=false
-TF_APPLY_RETRIES=0
-TF_MAX_APPLY_RETRIES=2
-
-while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
-    # Use tee to display output in real-time while capturing it for error detection
-    TF_TEMP_OUTPUT="/tmp/tf_apply_$$.log"
-    terraform -chdir="$(dirname "$0")" apply -auto-approve \
-      -var="gcp_project_id=${PROJECT_ID}" \
-      -var="app_name=${APP_NAME}" \
-      -var="gcp_region=${GCP_REGION}" \
-      -var="github_owner=${GITHUB_OWNER:-}" \
-      -var="github_repo=${GITHUB_REPO:-}" \
-      -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
-      -var="enable_firestore=${ENABLE_FIRESTORE}" \
-      -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
-      -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
-      -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
-      -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
-      -var="enable_pubsub=${ENABLE_PUBSUB}" \
-      -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
-      -var="enable_bigquery=${ENABLE_BIGQUERY}" \
-      -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
-      -var="enable_vision_ai=${ENABLE_VISION_AI}" \
-      -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
-      -var="enable_translation=${ENABLE_TRANSLATION}" \
-      -var="enable_scheduler=${ENABLE_SCHEDULER}" \
-      -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
-      -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
-      -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
-      -var="enable_monitoring=${ENABLE_MONITORING}" \
-      -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
-      -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-      -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-      -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" 2>&1 | tee "$TF_TEMP_OUTPUT"
-
-    TF_EXIT_CODE=$?
-    TF_APPLY_OUTPUT=$(cat "$TF_TEMP_OUTPUT")
-    rm -f "$TF_TEMP_OUTPUT"
-
-    # Check for terraform errors in output (terraform may return 0 even with errors)
-    if [ $TF_EXIT_CODE -eq 0 ] && ! echo "$TF_APPLY_OUTPUT" | grep -qE "^Error:|^╷|Error creating|Error: Error"; then
-        TF_APPLY_SUCCESS=true
-        break
-    fi
-
-    # Check for specific "already exists" errors and try to recover
-    if echo "$TF_APPLY_OUTPUT" | grep -iE "Already Exists.*Dataset|Error.*409.*duplicate"; then
-        echo -e "${YELLOW}⚠${NC} Detected existing BigQuery dataset"
-        DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
-        echo -e "${BLUE}→${NC} Importing existing dataset into Terraform state"
-
-        # Import requires variables to be passed
-        if terraform -chdir="$(dirname "$0")" import \
-            -var="gcp_project_id=${PROJECT_ID}" \
-            -var="app_name=${APP_NAME}" \
-            -var="gcp_region=${GCP_REGION}" \
-            "google_bigquery_dataset.app_analytics[0]" "${DATASET_ID}" 2>&1 | grep -q "Successfully imported"; then
-            echo -e "${GREEN}✓${NC} Dataset imported, retrying deployment"
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 2
-            continue
-        else
-            echo -e "${YELLOW}⚠${NC} Could not import dataset, trying with delete and recreate"
-            bq rm --dataset --force "${DATASET_ID}" 2>/dev/null || true
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 3
-            continue
-        fi
-    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Error creating Job: googleapi: Error 409.*Resource.*already exists"; then
-        echo -e "${YELLOW}⚠${NC} Detected existing Cloud Scheduler Job"
-        echo -e "${BLUE}→${NC} Attempting to import existing job into Terraform state"
-
-        if terraform -chdir="$(dirname "$0")" import \
-            -var="gcp_project_id=${PROJECT_ID}" \
-            -var="app_name=${APP_NAME}" \
-            -var="gcp_region=${GCP_REGION}" \
-            "google_cloud_scheduler_job.app_cron[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/jobs/${APP_NAME}-cron" 2>&1 | grep -q "Successfully imported"; then
-            echo -e "${GREEN}✓${NC} Cloud Scheduler Job imported, retrying deployment"
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 2
-            continue
-        else
-            echo -e "${YELLOW}⚠${NC} Could not import Cloud Scheduler Job, attempting fallback delete"
-            gcloud scheduler jobs delete "${APP_NAME}-cron" --location="${GCP_REGION}" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 3
-            continue
-        fi
-    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Resource already exists in the project.*topics/"; then
-        echo -e "${YELLOW}⚠${NC} Detected existing Pub/Sub Topic"
-        echo -e "${BLUE}→${NC} Attempting to import existing topic into Terraform state"
-
-        if terraform -chdir="$(dirname "$0")" import \
-            -var="gcp_project_id=${PROJECT_ID}" \
-            -var="app_name=${APP_NAME}" \
-            -var="gcp_region=${GCP_REGION}" \
-            "google_pubsub_topic.app_events[0]" "projects/${PROJECT_ID}/topics/${APP_NAME}-events" 2>&1 | grep -q "Successfully imported"; then
-            echo -e "${GREEN}✓${NC} Pub/Sub Topic imported, retrying deployment"
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 2
-            continue
-        else
-            echo -e "${YELLOW}⚠${NC} Could not import Pub/Sub Topic, attempting fallback delete"
-            gcloud pubsub topics delete "${APP_NAME}-events" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 3
-            continue
-        fi
-    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Resource already exists in the project.*subscriptions/"; then
-        echo -e "${YELLOW}⚠${NC} Detected existing Pub/Sub Subscription"
-        echo -e "${BLUE}→${NC} Attempting to import existing subscription into Terraform state"
-
-        if terraform -chdir="$(dirname "$0")" import \
-            -var="gcp_project_id=${PROJECT_ID}" \
-            -var="app_name=${APP_NAME}" \
-            -var="gcp_region=${GCP_REGION}" \
-            "google_pubsub_subscription.app_events_sub[0]" "projects/${PROJECT_ID}/subscriptions/${APP_NAME}-events-subscription" 2>&1 | grep -q "Successfully imported"; then
-            echo -e "${GREEN}✓${NC} Pub/Sub Subscription imported, retrying deployment"
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 2
-            continue
-        else
-            echo -e "${YELLOW}⚠${NC} Could not import Pub/Sub Subscription, attempting fallback delete"
-            gcloud pubsub subscriptions delete "${APP_NAME}-events-subscription" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 3
-            continue
-        fi
-    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Resource.*repositories/.*already exists"; then
-        echo -e "${YELLOW}⚠${NC} Detected existing Artifact Registry Repository"
-        echo -e "${BLUE}→${NC} Attempting to import existing repository into Terraform state"
-
-        if terraform -chdir="$(dirname "$0")" import \
-            -var="gcp_project_id=${PROJECT_ID}" \
-            -var="app_name=${APP_NAME}" \
-            -var="gcp_region=${GCP_REGION}" \
-            "google_artifact_registry_repository.app_images[0]" "projects/${PROJECT_ID}/locations/${GCP_REGION}/repositories/${APP_NAME}-images" 2>&1 | grep -q "Successfully imported"; then
-            echo -e "${GREEN}✓${NC} Artifact Registry Repository imported, retrying deployment"
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 2
-            continue
-        else
-            echo -e "${YELLOW}⚠${NC} Could not import Artifact Registry Repository, attempting fallback delete"
-            gcloud artifacts repositories delete "${APP_NAME}-images" --location="${GCP_REGION}" --project="${PROJECT_ID}" --quiet 2>/dev/null || true
-            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-            sleep 3
-            continue
-        fi
-    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Error.*400.*Database ID.*is not available.*Please retry"; then
-        echo -e "${YELLOW}⚠${NC} Firestore database not yet available (transient error)"
-
-        # Extract retry time from error message and add 5 second buffer
-        RETRY_SECONDS=$(echo "$TF_APPLY_OUTPUT" | grep -oE "Please retry in [0-9]+ seconds" | grep -oE "[0-9]+" | head -1)
-        if [ -z "$RETRY_SECONDS" ]; then
-            RETRY_SECONDS=10
-        else
-            RETRY_SECONDS=$((RETRY_SECONDS + 5))
-        fi
-
-        echo -e "${BLUE}→${NC} Waiting ${RETRY_SECONDS} seconds before retry..."
-        sleep "$RETRY_SECONDS"
-        TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
-        continue
-    fi
-
-    # If not a recoverable error, fail
-    echo -e "${RED}✗ Terraform deployment failed${NC}"
-    echo "$TF_APPLY_OUTPUT"
-    exit 1
-done
-
-if [ "$TF_APPLY_SUCCESS" = false ]; then
-    echo -e "${RED}✗ Terraform deployment failed after retries${NC}"
-    exit 1
-fi
 echo -e "${GREEN}✓${NC} Infrastructure deployed"
 
 if ! RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url 2>&1); then

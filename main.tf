@@ -237,14 +237,6 @@ resource "google_artifact_registry_repository" "app_images" {
     }
   }
 
-  cleanup_policies {
-    id     = "keep-most-recent-tagged"
-    action = "DELETE"
-    condition {
-      tag_state            = "TAGGED"
-      most_recent_versions = 1
-    }
-  }
 }
 
 # Cloud Build trigger: watches GitHub main branch
