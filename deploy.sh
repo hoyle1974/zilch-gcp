@@ -1148,6 +1148,42 @@ if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
     fi
 fi
 
+# Final pass: Attempt imports for resources that frequently exist but may have been missed
+echo ""
+echo -e "${BOLD}Final Import Pass${NC}"
+
+# Try to import Firestore database if it exists but isn't in state
+if ! terraform -chdir="$(dirname "$0")" state list 'google_firestore_database.default[0]' &>/dev/null 2>&1; then
+    if [ "$ENABLE_FIRESTORE" == "true" ] && gcloud firestore databases list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -q ".*"; then
+        echo -e "${BLUE}→${NC} Attempting final Firestore database import"
+        terraform -chdir="$(dirname "$0")" import \
+          -var="gcp_project_id=${PROJECT_ID}" \
+          -var="app_name=${APP_NAME}" \
+          -var="gcp_region=${GCP_REGION}" \
+          -var="enable_firestore=${ENABLE_FIRESTORE}" \
+          'google_firestore_database.default[0]' \
+          '(default)' &>/dev/null 2>&1 && echo -e "${GREEN}✓${NC} Firestore database imported" || true
+    fi
+fi
+
+# Try to import Budget Alerts subscription if it exists but isn't in state
+if ! terraform -chdir="$(dirname "$0")" state list 'google_pubsub_subscription.budget_alerts_sub[0]' &>/dev/null 2>&1; then
+    if [ "$ENABLE_MONITORING" == "true" ]; then
+        ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
+        if gcloud pubsub subscriptions list --project="${PROJECT_ID}" --filter="name:${ALERTS_SUB}" --format="value(name)" 2>/dev/null | grep -q "$ALERTS_SUB"; then
+            echo -e "${BLUE}→${NC} Attempting final budget alerts subscription import"
+            terraform -chdir="$(dirname "$0")" import \
+              -var="gcp_project_id=${PROJECT_ID}" \
+              -var="app_name=${APP_NAME}" \
+              -var="gcp_region=${GCP_REGION}" \
+              -var="enable_monitoring=${ENABLE_MONITORING}" \
+              -var="enable_pubsub=${ENABLE_PUBSUB}" \
+              'google_pubsub_subscription.budget_alerts_sub[0]' \
+              "projects/${PROJECT_ID}/subscriptions/${ALERTS_SUB}" &>/dev/null 2>&1 && echo -e "${GREEN}✓${NC} Budget alerts subscription imported" || true
+        fi
+    fi
+fi
+
 echo ""
 echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
