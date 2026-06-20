@@ -533,6 +533,15 @@ def _reconcile_state(tf: TerraformExecutor, config: ZilchConfig) -> None:
             )
         )
 
+    if config.enable_cloud_tasks:
+        resources.append(
+            (
+                "google_cloud_tasks_queue.app_jobs[0]",
+                f"projects/{config.gcp_project_id}/locations/{config.gcp_region}/queues/{config.app_name}-jobs",
+                "Cloud Tasks Queue",
+            )
+        )
+
     if config.enable_cloud_kms:
         resources.append(
             (
