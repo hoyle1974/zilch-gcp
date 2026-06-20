@@ -631,6 +631,57 @@ fi
 
 echo ""
 echo -e "${BOLD}Terraform${NC}"
+
+# Check for and handle stale Terraform state locks
+handle_terraform_lock() {
+    local lock_path="gs://${STATE_BUCKET}/terraform/state/default.tflock"
+
+    if gcloud storage ls "$lock_path" &>/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠${NC} Found existing Terraform state lock"
+        echo ""
+
+        # Try to get lock metadata
+        LOCK_METADATA=$(gcloud storage ls -L "$lock_path" 2>/dev/null | grep -E "Time created:|Time updated:" | head -2)
+        if [ -n "$LOCK_METADATA" ]; then
+            echo "Lock details:"
+            echo "$LOCK_METADATA" | sed 's/^/  /'
+            echo ""
+        fi
+
+        echo "This usually means:"
+        echo "  • A previous deployment was interrupted"
+        echo "  • Terraform crashed while holding the lock"
+        echo "  • Multiple deployments are running simultaneously"
+        echo ""
+
+        if [ "$AUTO_MODE" = true ]; then
+            echo -e "${RED}✗${NC} State lock exists and auto mode cannot proceed safely${NC}"
+            echo ""
+            echo "To recover, either:"
+            echo "  1. Wait for the lock to expire (if another deployment is running)"
+            echo "  2. Manually clean up: ${CYAN}gsutil rm ${lock_path}${NC}"
+            echo "  3. Force-remove from previous session if confirmed stale:"
+            echo "     ${CYAN}gsutil -m rm -r ${lock_path}${NC}"
+            exit 1
+        else
+            read -p "${BLUE}Remove stale lock and continue?${NC} ${CYAN}[y/n]${NC}: " choice
+            if [[ "$choice" =~ ^[Yy]$ ]]; then
+                if gcloud storage rm "$lock_path" &>/dev/null 2>&1; then
+                    echo -e "${GREEN}✓${NC} Lock removed"
+                else
+                    echo -e "${RED}✗${NC} Failed to remove lock"
+                    exit 1
+                fi
+            else
+                echo -e "${YELLOW}⚠${NC} Cannot proceed without removing lock"
+                exit 1
+            fi
+        fi
+    fi
+}
+
+handle_terraform_lock
+
 echo -e "${BLUE}→${NC} Enabling foundational APIs"
 # Cloud Resource Manager API is required by Terraform to manage services and IAM
 gcloud services enable cloudresourcemanager.googleapis.com --project="$PROJECT_ID" --quiet 2>&1 >/dev/null
@@ -684,40 +735,92 @@ echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
 export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 
-if ! terraform -chdir="$(dirname "$0")" apply -auto-approve \
-  -var="gcp_project_id=${PROJECT_ID}" \
-  -var="app_name=${APP_NAME}" \
-  -var="gcp_region=${GCP_REGION}" \
-  -var="github_owner=${GITHUB_OWNER}" \
-  -var="github_repo=${GITHUB_REPO}" \
-  -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
-  -var="enable_firestore=${ENABLE_FIRESTORE}" \
-  -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
-  -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
-  -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
-  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
-  -var="enable_pubsub=${ENABLE_PUBSUB}" \
-  -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
-  -var="enable_bigquery=${ENABLE_BIGQUERY}" \
-  -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
-  -var="enable_vision_ai=${ENABLE_VISION_AI}" \
-  -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
-  -var="enable_translation=${ENABLE_TRANSLATION}" \
-  -var="enable_scheduler=${ENABLE_SCHEDULER}" \
-  -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
-  -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
-  -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
-  -var="enable_monitoring=${ENABLE_MONITORING}" \
-  -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
-  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-  -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID}"; then
+# Refresh state before apply to catch resources created outside of Terraform
+# This prevents "already exists" errors on redeploy
+echo -e "${BLUE}→${NC} Refreshing state"
+if ! terraform -chdir="$(dirname "$0")" refresh -auto-approve 2>&1 | grep -E "(Error|failed)" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} State refreshed"
+else
+    echo -e "${YELLOW}⚠${NC} State refresh had warnings but continuing"
+fi
+
+TF_APPLY_SUCCESS=false
+TF_APPLY_RETRIES=0
+TF_MAX_APPLY_RETRIES=2
+
+while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
+    TF_APPLY_OUTPUT=$(terraform -chdir="$(dirname "$0")" apply -auto-approve \
+      -var="gcp_project_id=${PROJECT_ID}" \
+      -var="app_name=${APP_NAME}" \
+      -var="gcp_region=${GCP_REGION}" \
+      -var="github_owner=${GITHUB_OWNER:-}" \
+      -var="github_repo=${GITHUB_REPO:-}" \
+      -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
+      -var="enable_firestore=${ENABLE_FIRESTORE}" \
+      -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
+      -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
+      -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
+      -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
+      -var="enable_pubsub=${ENABLE_PUBSUB}" \
+      -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
+      -var="enable_bigquery=${ENABLE_BIGQUERY}" \
+      -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
+      -var="enable_vision_ai=${ENABLE_VISION_AI}" \
+      -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
+      -var="enable_translation=${ENABLE_TRANSLATION}" \
+      -var="enable_scheduler=${ENABLE_SCHEDULER}" \
+      -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
+      -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
+      -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
+      -var="enable_monitoring=${ENABLE_MONITORING}" \
+      -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
+      -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
+      -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
+      -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" 2>&1)
+
+    if [ $? -eq 0 ]; then
+        TF_APPLY_SUCCESS=true
+        break
+    fi
+
+    # Check for specific "already exists" errors and try to recover
+    if echo "$TF_APPLY_OUTPUT" | grep -q "Already Exists: Dataset"; then
+        echo -e "${YELLOW}⚠${NC} Detected existing BigQuery dataset"
+        DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
+        echo -e "${BLUE}→${NC} Importing existing dataset into Terraform state"
+
+        if terraform -chdir="$(dirname "$0")" import "google_bigquery_dataset.app_analytics[0]" "${DATASET_ID}" 2>&1 | grep -q "Successfully imported"; then
+            echo -e "${GREEN}✓${NC} Dataset imported, retrying deployment"
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 2
+            continue
+        else
+            echo -e "${YELLOW}⚠${NC} Could not import dataset, trying with delete and recreate"
+            bq rm --dataset --force "${DATASET_ID}" 2>/dev/null || true
+            TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+            sleep 3
+            continue
+        fi
+    fi
+
+    # If not a recoverable error, fail
     echo -e "${RED}✗ Terraform deployment failed${NC}"
+    echo "$TF_APPLY_OUTPUT"
+    exit 1
+done
+
+if [ "$TF_APPLY_SUCCESS" = false ]; then
+    echo -e "${RED}✗ Terraform deployment failed after retries${NC}"
     exit 1
 fi
 echo -e "${GREEN}✓${NC} Infrastructure deployed"
 
-RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url)
+if ! RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url 2>&1); then
+    echo -e "${RED}✗${NC} Failed to retrieve Cloud Run URL"
+    echo "$RUN_URL"
+    exit 1
+fi
+
 echo ""
 echo -e "${BOLD}Post-Deployment Checks${NC}"
 echo -e "${BLUE}→${NC} Testing endpoint ${CYAN}${RUN_URL}${NC}"
@@ -747,24 +850,36 @@ fi
 
 # Config already saved early (before Terraform) for quick recovery on failure
 
+# Helper to safely get terraform outputs
+get_tf_output() {
+    local output_name=$1
+    terraform -chdir="$(dirname "$0")" output -raw "$output_name" 2>/dev/null || echo ""
+}
+
+SERVICE_ACCOUNT_EMAIL=$(get_tf_output service_account_email)
+STORAGE_BUCKET=$(get_tf_output storage_bucket)
+KMS_KEY_ID=$(get_tf_output kms_key_id)
+
 echo ""
 echo -e "${GREEN}${BOLD}Deployment Complete${NC}"
 echo ""
 echo -e "  Endpoint:  ${CYAN}${RUN_URL}${NC}"
-echo -e "  Identity:  ${CYAN}$(terraform -chdir="$(dirname "$0")" output -raw service_account_email)${NC}"
+if [ -n "$SERVICE_ACCOUNT_EMAIL" ]; then
+    echo -e "  Identity:  ${CYAN}${SERVICE_ACCOUNT_EMAIL}${NC}"
+fi
 echo -e "  Region:    ${CYAN}${GCP_REGION}${NC}"
 echo ""
 echo -e "${BOLD}Configured Services:${NC}"
 if [ "$ENABLE_FIRESTORE" == "true" ]; then echo "  ↳ ZILCH_FIRESTORE_DATABASE : (default)"; fi
 if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then echo "  ↳ ZILCH_SECRET_PREFIX      : ${APP_NAME}-"; fi
-if [ "$ENABLE_CLOUD_STORAGE" == "true" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : $(terraform -chdir="$(dirname "$0")" output -raw storage_bucket 2>/dev/null)"; fi
+if [ "$ENABLE_CLOUD_STORAGE" == "true" ] && [ -n "$STORAGE_BUCKET" ]; then echo "  ↳ ZILCH_STORAGE_BUCKET     : ${STORAGE_BUCKET}"; fi
 if [ "$ENABLE_VERTEX_AI" == "true" ]; then echo "  ↳ ZILCH_VERTEX_AI_ENABLED  : true"; fi
 if [ "$ENABLE_FIREBASE_AUTH" == "true" ]; then echo "  ↳ ZILCH_FIREBASE_ENABLED   : true"; fi
 if [ "$ENABLE_PUBSUB" == "true" ]; then echo "  ↳ ZILCH_PUBSUB_TOPIC       : ${APP_NAME}-events"; fi
 if [ "$ENABLE_PUBSUB" == "true" ]; then echo "  ↳ ZILCH_PUBSUB_SUBSCRIPTION: ${APP_NAME}-events-subscription"; fi
 if [ "$ENABLE_CLOUD_TASKS" == "true" ]; then echo "  ↳ ZILCH_CLOUD_TASKS_QUEUE  : projects/${PROJECT_ID}/locations/${GCP_REGION}/queues/${APP_NAME}-jobs"; fi
 if [ "$ENABLE_BIGQUERY" == "true" ]; then echo "  ↳ ZILCH_BIGQUERY_DATASET   : $(echo ${APP_NAME} | tr '-' '_')_analytics"; fi
-if [ "$ENABLE_CLOUD_KMS" == "true" ]; then echo "  ↳ ZILCH_KMS_KEY_ID         : $(terraform -chdir="$(dirname "$0")" output -raw kms_key_id 2>/dev/null)"; fi
+if [ "$ENABLE_CLOUD_KMS" == "true" ] && [ -n "$KMS_KEY_ID" ]; then echo "  ↳ ZILCH_KMS_KEY_ID         : ${KMS_KEY_ID}"; fi
 if [ "$ENABLE_VISION_AI" == "true" ]; then echo "  ↳ ZILCH_VISION_AI_ENABLED  : true"; fi
 if [ "$ENABLE_SPEECH_TO_TEXT" == "true" ]; then echo "  ↳ ZILCH_SPEECH_TO_TEXT_ENABLED: true"; fi
 if [ "$ENABLE_TRANSLATION" == "true" ]; then echo "  ↳ ZILCH_TRANSLATION_ENABLED: true"; fi
