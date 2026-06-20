@@ -177,3 +177,13 @@ resource "google_secret_manager_secret_iam_member" "mysql_root_password_accessor
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.mysql[0].email}"
 }
+
+# IAM: Allow Cloud Run service account to access MySQL VM
+resource "google_compute_instance_iam_member" "cloud_run_mysql_access" {
+  count         = var.enable_mysql ? 1 : 0
+  instance_name = google_compute_instance.mysql[0].name
+  zone          = google_compute_instance.mysql[0].zone
+  role          = "roles/compute.osLogin"
+  member        = "serviceAccount:${google_service_account.app.email}"
+  project       = var.gcp_project_id
+}
