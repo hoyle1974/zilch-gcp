@@ -93,7 +93,7 @@ resource "random_id" "bucket_suffix" {
 }
 
 resource "random_id" "queue_suffix" {
-  byte_length = 2
+  byte_length = 4
 }
 
 resource "random_id" "kms_suffix" {
@@ -436,7 +436,8 @@ resource "google_project_service" "cloud_tasks" {
 resource "google_cloud_tasks_queue" "app_jobs" {
   count = var.enable_cloud_tasks ? 1 : 0
 
-  name     = "${var.app_name}-jobs-${random_id.queue_suffix.hex}"
+  # Use timestamp to avoid Cloud Tasks 7-day soft-delete conflicts
+  name     = "${var.app_name}-jobs-${formatdate("YYYYMMDD-hhmm", timestamp())}"
   location = var.gcp_region
 
   rate_limits {
