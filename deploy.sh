@@ -815,7 +815,7 @@ while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
     rm -f "$TF_TEMP_OUTPUT"
 
     # Check for terraform errors in output (terraform may return 0 even with errors)
-    if [ $TF_EXIT_CODE -eq 0 ] && ! echo "$TF_APPLY_OUTPUT" | grep -qE "^Error:|^╷|Error:.*already exists|Error:.*duplicate"; then
+    if [ $TF_EXIT_CODE -eq 0 ] && ! echo "$TF_APPLY_OUTPUT" | grep -qE "^Error:|^╷|Error creating|Error: Error"; then
         TF_APPLY_SUCCESS=true
         break
     fi
