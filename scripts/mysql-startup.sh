@@ -24,8 +24,8 @@ PROJECT_ID="${PROJECT_ID}"
 
 # Retry secret fetches up to 3 times (metadata server takes time to be ready)
 for attempt in 1 2 3; do
-    MYSQL_ROOT_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-root-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}" 2>/dev/null || echo "")
-    MYSQL_APP_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-app-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}" 2>/dev/null || echo "")
+    MYSQL_ROOT_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-root-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}" 2>/dev/null | tr -d '\n' || echo "")
+    MYSQL_APP_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-app-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}" 2>/dev/null | tr -d '\n' || echo "")
 
     if [ -n "$MYSQL_ROOT_PASSWORD" ] && [ -n "$MYSQL_APP_PASSWORD" ]; then
         log "Secrets retrieved successfully"
@@ -117,10 +117,10 @@ else
         --name mysql-server \
         --restart=always \
         -d \
-        -e MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
-        -e MYSQL_DATABASE="$MYSQL_DATABASE" \
-        -e MYSQL_USER="$MYSQL_APP_USER" \
-        -e MYSQL_PASSWORD="$MYSQL_APP_PASSWORD" \
+        -e "MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD" \
+        -e "MYSQL_DATABASE=$MYSQL_DATABASE" \
+        -e "MYSQL_USER=$MYSQL_APP_USER" \
+        -e "MYSQL_PASSWORD=$MYSQL_APP_PASSWORD" \
         -p "${MYSQL_PORT}:3306" \
         -v "$MYSQL_DATA_DIR/mysql":/var/lib/mysql \
         mysql:8.0 \
