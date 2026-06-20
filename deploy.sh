@@ -1338,6 +1338,20 @@ fi
 
 echo -e "${GREEN}✓${NC} Infrastructure deployed"
 
+echo ""
+echo -e "${BLUE}→${NC} Deploying reference app"
+if gcloud run deploy "${APP_NAME}" \
+    --source "$(cd "$(dirname "$0")/.." && pwd)/zilch-reference-app" \
+    --region="${GCP_REGION}" \
+    --allow-unauthenticated \
+    --quiet \
+    --service-account="${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" 2>&1 | grep -q "Service"; then
+    echo -e "${GREEN}✓${NC} App deployed"
+else
+    echo -e "${YELLOW}⚠${NC} App deployment skipped or already deployed"
+fi
+
+echo ""
 if ! RUN_URL=$(terraform -chdir="$(dirname "$0")" output -raw cloud_run_url 2>&1); then
     echo -e "${RED}✗${NC} Failed to retrieve Cloud Run URL"
     echo "$RUN_URL"
