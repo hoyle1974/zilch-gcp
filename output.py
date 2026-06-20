@@ -67,27 +67,25 @@ def print_deployment_summary(config: dict, outputs: dict, billing_info: dict = N
 
     click.echo(f"  Region:    {cyan(config.get('gcp_region', 'us-central1'))}")
 
-    # Show billing info if available
-    if billing_info:
-        budget = config.get('billing_budget_limit_usd')
-        if budget:
-            budget_float = float(budget) if isinstance(budget, str) else budget
-            budget_text = f"Budget: {cyan(f'${budget_float:.2f} USD/month')}"
-        else:
-            budget_text = "(No budget set)"
+    # Show billing info
+    budget = config.get('billing_budget_limit_usd')
+    if budget or billing_info:
+        budget_float = float(budget) if budget else None
+        account_info = ""
+        if billing_info and billing_info.get('account_name'):
+            account_info = f" ({billing_info['account_name']})"
 
-        if billing_info.get('amount') is not None:
+        if billing_info and billing_info.get('amount') is not None:
+            # Show actual spend vs budget
             amount = billing_info['amount']
-            if budget and budget_float > 0:
-                percentage = (amount / budget_float * 100)
-                click.echo(f"  Spend:     {yellow(f'${amount:.2f} USD')} / {cyan(f'${budget_float:.2f} USD')} ({percentage:.1f}%)")
+            if budget_float:
+                percentage = (amount / budget_float * 100) if budget_float > 0 else 0
+                click.echo(f"  Spend:     {yellow(f'${amount:.2f} USD')} / {cyan(f'${budget_float:.2f} USD')} ({percentage:.1f}%){account_info}")
             else:
-                click.echo(f"  Spend:     {yellow(f'${amount:.2f} USD')} (current month)")
-        else:
-            click.echo(f"  Spend:     {budget_text}")
-    elif config.get('billing_budget_limit_usd'):
-        budget_float = float(config.get('billing_budget_limit_usd'))
-        click.echo(f"  Spend:     Budget: {cyan(f'${budget_float:.2f} USD/month')} (actual spend unavailable)")
+                click.echo(f"  Spend:     {yellow(f'${amount:.2f} USD')} (current month){account_info}")
+        elif budget_float:
+            # Show budget only
+            click.echo(f"  Budget:    {cyan(f'${budget_float:.2f} USD/month')}{account_info}")
     click.echo()
 
     click.echo(bold("Configured Services:"))

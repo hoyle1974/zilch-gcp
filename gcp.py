@@ -381,31 +381,26 @@ def remove_terraform_lock(state_bucket: str, app_name: str) -> bool:
 
 
 def get_billing_info(project_id: str) -> Optional[dict]:
-    """Get current month-to-date billing for a project.
+    """Get billing account info and current month spending for a project.
+
+    Queries BigQuery billing export if available, falls back to budget info.
 
     Args:
         project_id: GCP project ID
 
     Returns:
-        Dict with 'currency', 'amount' keys, or None if unavailable
+        Dict with 'currency', 'amount', 'account_name', or None if unavailable
     """
     try:
-        from google.cloud import billing_v1
-        from google.cloud import compute_v1
-        from datetime import datetime, timedelta
-        import os
-
         # Get billing account linked to this project
         result = subprocess.run(
             [
                 "gcloud",
                 "billing",
-                "accounts",
-                "list",
-                "--filter",
-                f"linkedProjects.name={project_id}",
-                "--format",
-                "value(name)",
+                "projects",
+                "describe",
+                project_id,
+                "--format=value(billingAccountName)",
             ],
             capture_output=True,
             timeout=10,
@@ -413,78 +408,86 @@ def get_billing_info(project_id: str) -> Optional[dict]:
             text=True,
         )
 
-        billing_account = result.stdout.strip()
-        if not billing_account:
+        billing_account_full = result.stdout.strip()
+        if not billing_account_full:
             return None
 
-        # Query current month spending using Billing API
+        # Extract account ID
+        billing_account = billing_account_full.split("/")[-1] if "/" in billing_account_full else billing_account_full
+
+        # Get billing account display name
+        result = subprocess.run(
+            [
+                "gcloud",
+                "billing",
+                "accounts",
+                "describe",
+                billing_account,
+                "--format=value(displayName)",
+            ],
+            capture_output=True,
+            timeout=10,
+            check=False,
+            text=True,
+        )
+
+        account_name = result.stdout.strip() or billing_account
+
+        # Try to query BigQuery billing export for actual spend
         try:
-            client = billing_v1.CloudBillingClient()
+            from datetime import datetime
 
-            # Get the current date
-            today = datetime.utcnow()
-
-            # Calculate month start and end
-            month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            if today.month == 12:
-                month_end = month_start.replace(year=today.year + 1, month=1)
-            else:
-                month_end = month_start.replace(month=today.month + 1)
-
-            # Convert to ISO format for API
+            month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             start_date = month_start.strftime("%Y-%m-%d")
-            end_date = month_end.strftime("%Y-%m-%d")
 
-            # Get billing account details
-            account_name = f"billingAccounts/{billing_account}"
-            account = client.get_billing_account(name=account_name)
+            # Query billing export table for current month costs
+            result = subprocess.run(
+                [
+                    "bq",
+                    "query",
+                    f"--project_id={project_id}",
+                    "--format=json",
+                    "--nouse_legacy_sql",
+                ],
+                input=f"""
+SELECT
+  ROUND(SUM(CAST(cost as float64)), 2) as total_cost
+FROM `{project_id}.billing.gcp_billing_export_v1_*`
+WHERE _TABLE_SUFFIX >= FORMAT_DATE('%Y%m%d', DATE('{start_date}'))
+  AND _TABLE_SUFFIX < FORMAT_DATE('%Y%m%d', DATE_ADD(DATE('{start_date}'), INTERVAL 1 MONTH))
+LIMIT 1
+""",
+                capture_output=True,
+                timeout=15,
+                check=False,
+                text=True,
+            )
 
-            # Query spending via BigQuery if available (requires billing export dataset)
-            # For now, try to get budget info which includes spending
-            try:
-                budgets_client = billing_v1.BudgetServiceClient()
-                parent = f"billingAccounts/{billing_account}"
-                budgets_list = budgets_client.list_budgets(parent=parent)
-                budgets = list(budgets_list)
+            if result.returncode == 0:
+                import json
+                try:
+                    data = json.loads(result.stdout)
+                    if data and len(data) > 0 and "total_cost" in data[0]:
+                        amount = float(data[0]["total_cost"]) if data[0]["total_cost"] else 0.0
+                        return {
+                            "currency": "USD",
+                            "amount": amount,
+                            "account_name": account_name,
+                            "billing_account": billing_account,
+                        }
+                except (json.JSONDecodeError, ValueError, IndexError):
+                    pass
 
-                # Get current month spending from budgets
-                if budgets:
-                    budget = budgets[0]  # Use first budget
-                    # Try to get actual spending data
-                    if hasattr(budget, 'calculated_spend'):
-                        # Some budget versions include calculated spend
-                        if hasattr(budget.calculated_spend, 'actual_last_period_spend'):
-                            actual_spend = budget.calculated_spend.actual_last_period_spend
-                            if hasattr(actual_spend, 'units'):
-                                spent = actual_spend.units or 0
-                                nanos = actual_spend.nanos or 0
-                                total_spent = spent + (nanos / 1e9)
-                                return {
-                                    "currency": "USD",
-                                    "amount": total_spent,
-                                    "account_name": account.display_name or billing_account,
-                                }
+        except Exception:
+            pass
 
-                # Fallback: return account info without spending data
-                return {
-                    "currency": "USD",
-                    "amount": None,
-                    "account_name": account.display_name or billing_account,
-                }
-            except Exception as budget_err:
-                # Fallback: return account info without spending data
-                return {
-                    "currency": "USD",
-                    "amount": None,
-                    "account_name": account.display_name or billing_account,
-                }
-
-        except ImportError:
-            # google-cloud-billing not installed
-            return None
-        except Exception as e:
-            # Billing API not accessible or project not linked
-            return None
+        # Fallback: return account info without actual spend
+        return {
+            "currency": "USD",
+            "amount": None,
+            "account_name": account_name,
+            "billing_account": billing_account,
+        }
 
     except Exception:
         return None
