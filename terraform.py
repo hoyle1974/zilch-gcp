@@ -54,8 +54,6 @@ class TerraformExecutor:
             try:
                 subprocess.run(
                     cmd,
-                    capture_output=True,
-                    text=True,
                     timeout=120,
                     check=True,
                 )
@@ -68,7 +66,7 @@ class TerraformExecutor:
                     )
                 else:
                     raise TerraformError(
-                        f"Terraform init failed: {e.stderr}"
+                        f"Terraform init failed"
                     )
 
     def apply(self, vars_dict: Dict[str, str]) -> None:
@@ -105,8 +103,6 @@ class TerraformExecutor:
         try:
             result = subprocess.run(
                 cmd,
-                capture_output=True,
-                text=True,
                 timeout=600,  # 10 minutes
                 check=True,
                 cwd=str(self.working_dir),
@@ -114,7 +110,7 @@ class TerraformExecutor:
             )
             success("Infrastructure deployed")
         except subprocess.CalledProcessError as e:
-            raise TerraformError(f"Terraform apply failed: {e.stderr}")
+            raise TerraformError(f"Terraform apply failed")
 
     def destroy(self, vars_dict: Dict[str, str], force: bool = False) -> bool:
         """Destroy Terraform infrastructure.
