@@ -1208,8 +1208,8 @@ if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
             fi
             if [ -n "$KEYRING_NAME" ] && gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING_NAME}" --project="${PROJECT_ID}" --filter="name:${CRYPTOKEY}" &>/dev/null 2>&1; then
                 echo -e "${BLUE}→${NC} Found KMS crypto key in GCP but not in Terraform state"
-                # Use short format: location/keyring/cryptoKeys/name
-                if import_resource "google_kms_crypto_key.app_key[0]" "${GCP_REGION}/${KEYRING_NAME}/cryptoKeys/${CRYPTOKEY}"; then
+                # Use short format: project/location/keyring/key
+                if import_resource "google_kms_crypto_key.app_key[0]" "${PROJECT_ID}/${GCP_REGION}/${KEYRING_NAME}/${CRYPTOKEY}"; then
                     echo -e "${GREEN}✓${NC} Imported KMS crypto key"
                 else
                     echo -e "${RED}✗${NC} Failed to import KMS crypto key"
