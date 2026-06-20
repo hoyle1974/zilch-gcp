@@ -1,3 +1,13 @@
+# Static public IP for MySQL
+resource "google_compute_address" "mysql" {
+  count   = var.enable_mysql ? 1 : 0
+  name    = "zilch-mysql-ip-${local.mysql_resource_suffix}"
+  region  = var.gcp_region
+  project = var.gcp_project_id
+
+  labels = local.mysql_labels
+}
+
 # Compute Engine e2-micro VM for MySQL
 resource "google_compute_instance" "mysql" {
   count          = var.enable_mysql ? 1 : 0
@@ -29,6 +39,7 @@ resource "google_compute_instance" "mysql" {
 
     # Public IP for Cloud Run access (password + non-standard port provide security)
     access_config {
+      nat_ip = google_compute_address.mysql[0].address
     }
   }
 
