@@ -238,11 +238,11 @@ resource "google_artifact_registry_repository" "app_images" {
   }
 
   cleanup_policies {
-    id     = "delete-old-tags"
+    id     = "keep-most-recent-tagged"
     action = "DELETE"
     condition {
-      tag_state  = "TAGGED"
-      older_than = "604800s" # Keep last 7 days only (7 * 24 * 60 * 60 = 604800 seconds)
+      tag_state            = "TAGGED"
+      most_recent_versions = 1
     }
   }
 }
