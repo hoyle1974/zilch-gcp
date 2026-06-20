@@ -26,3 +26,6 @@ build/
 
 # Zilch Configuration
 .zilch.config
+
+# Claude Code
+.claude/**/*.lock
