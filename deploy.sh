@@ -923,6 +923,24 @@ while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
             sleep 3
             continue
         fi
+    elif echo "$TF_APPLY_OUTPUT" | grep -iE "Error.*400.*Database ID.*is not available.*Please retry"; then
+        echo -e "${YELLOW}⚠${NC} Firestore database not yet available (transient error)"
+
+        # Extract retry time from error message if present
+        RETRY_SECONDS=$(echo "$TF_APPLY_OUTPUT" | grep -oE "Please retry in [0-9]+ seconds" | grep -oE "[0-9]+" | head -1)
+        if [ -z "$RETRY_SECONDS" ]; then
+            RETRY_SECONDS=10
+        fi
+
+        # Cap the wait time to avoid excessively long delays (max 30 seconds)
+        if [ "$RETRY_SECONDS" -gt 30 ]; then
+            RETRY_SECONDS=30
+        fi
+
+        echo -e "${BLUE}→${NC} Waiting ${RETRY_SECONDS} seconds before retry..."
+        sleep "$RETRY_SECONDS"
+        TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+        continue
     fi
 
     # If not a recoverable error, fail
