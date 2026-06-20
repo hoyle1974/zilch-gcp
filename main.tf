@@ -254,6 +254,7 @@ resource "google_cloud_run_v2_service" "app" {
     google_project_service.run,
     google_compute_instance.mysql,
     google_secret_manager_secret_version.mysql_app_password,
+    google_secret_manager_secret_iam_member.mysql_app_password_accessor,
   ]
 }
 
