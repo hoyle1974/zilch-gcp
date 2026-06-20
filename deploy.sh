@@ -793,7 +793,12 @@ while [ $TF_APPLY_RETRIES -lt $TF_MAX_APPLY_RETRIES ]; do
         DATASET_ID=$(echo ${APP_NAME} | tr '-' '_')_analytics
         echo -e "${BLUE}→${NC} Importing existing dataset into Terraform state"
 
-        if terraform -chdir="$(dirname "$0")" import "google_bigquery_dataset.app_analytics[0]" "${DATASET_ID}" 2>&1 | grep -q "Successfully imported"; then
+        # Import requires variables to be passed
+        if terraform -chdir="$(dirname "$0")" import \
+            -var="gcp_project_id=${PROJECT_ID}" \
+            -var="app_name=${APP_NAME}" \
+            -var="gcp_region=${GCP_REGION}" \
+            "google_bigquery_dataset.app_analytics[0]" "${DATASET_ID}" 2>&1 | grep -q "Successfully imported"; then
             echo -e "${GREEN}✓${NC} Dataset imported, retrying deployment"
             TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
             sleep 2
