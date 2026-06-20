@@ -1263,36 +1263,78 @@ echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
 export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 
-terraform -chdir="$(dirname "$0")" apply -auto-approve \
-  -var="gcp_project_id=${PROJECT_ID}" \
-  -var="app_name=${APP_NAME}" \
-  -var="gcp_region=${GCP_REGION}" \
-  -var="github_owner=${GITHUB_OWNER:-}" \
-  -var="github_repo=${GITHUB_REPO:-}" \
-  -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
-  -var="enable_firestore=${ENABLE_FIRESTORE}" \
-  -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
-  -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
-  -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
-  -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
-  -var="enable_pubsub=${ENABLE_PUBSUB}" \
-  -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
-  -var="enable_bigquery=${ENABLE_BIGQUERY}" \
-  -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
-  -var="enable_vision_ai=${ENABLE_VISION_AI}" \
-  -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
-  -var="enable_translation=${ENABLE_TRANSLATION}" \
-  -var="enable_scheduler=${ENABLE_SCHEDULER}" \
-  -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
-  -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
-  -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
-  -var="enable_monitoring=${ENABLE_MONITORING}" \
-  -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
-  -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
-  -var="enable_mysql=${ENABLE_MYSQL}" \
-  -var="mysql_database_name=${MYSQL_DB_NAME}" \
-  -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
-  -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" || exit 1
+# Terraform apply with automatic retry for common state sync issues
+TF_APPLY_RETRIES=0
+TF_APPLY_MAX_RETRIES=2
+TF_APPLY_SUCCESS=false
+
+while [ $TF_APPLY_RETRIES -lt $TF_APPLY_MAX_RETRIES ]; do
+    TF_OUTPUT=$(terraform -chdir="$(dirname "$0")" apply -auto-approve \
+      -var="gcp_project_id=${PROJECT_ID}" \
+      -var="app_name=${APP_NAME}" \
+      -var="gcp_region=${GCP_REGION}" \
+      -var="github_owner=${GITHUB_OWNER:-}" \
+      -var="github_repo=${GITHUB_REPO:-}" \
+      -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
+      -var="enable_firestore=${ENABLE_FIRESTORE}" \
+      -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
+      -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
+      -var="enable_firebase_auth=${ENABLE_FIREBASE_AUTH}" \
+      -var="enable_vertex_ai=${ENABLE_VERTEX_AI}" \
+      -var="enable_pubsub=${ENABLE_PUBSUB}" \
+      -var="enable_cloud_tasks=${ENABLE_CLOUD_TASKS}" \
+      -var="enable_bigquery=${ENABLE_BIGQUERY}" \
+      -var="enable_cloud_kms=${ENABLE_CLOUD_KMS}" \
+      -var="enable_vision_ai=${ENABLE_VISION_AI}" \
+      -var="enable_speech_to_text=${ENABLE_SPEECH_TO_TEXT}" \
+      -var="enable_translation=${ENABLE_TRANSLATION}" \
+      -var="enable_scheduler=${ENABLE_SCHEDULER}" \
+      -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
+      -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
+      -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
+      -var="enable_monitoring=${ENABLE_MONITORING}" \
+      -var="billing_account_name=${BILLING_ACCOUNT_NAME}" \
+      -var="billing_budget_limit_usd=${BILLING_BUDGET_LIMIT_USD}" \
+      -var="enable_mysql=${ENABLE_MYSQL}" \
+      -var="mysql_database_name=${MYSQL_DB_NAME}" \
+      -var="allow_unauthenticated_access=${ALLOW_UNAUTHENTICATED_ACCESS}" \
+      -var="gcp_billing_account_id=${GCP_BILLING_ACCOUNT_ID:-}" 2>&1)
+
+    TF_APPLY_EXIT=$?
+
+    if [ $TF_APPLY_EXIT -eq 0 ]; then
+        TF_APPLY_SUCCESS=true
+        break
+    fi
+
+    # Check for known recoverable errors and attempt auto-recovery
+    if echo "$TF_OUTPUT" | grep -q "already exists"; then
+        echo -e "${YELLOW}⚠${NC} Found existing resources out of sync with Terraform state"
+
+        # Try to recover KMS resources
+        if echo "$TF_OUTPUT" | grep -q "KeyRing.*already exists"; then
+            echo "  Recovering KMS key ring from state..."
+            terraform -chdir="$(dirname "$0")" state rm 'google_kms_key_ring.app_keys[0]' 2>/dev/null || true
+            terraform -chdir="$(dirname "$0")" state rm 'google_kms_crypto_key.app_key[0]' 2>/dev/null || true
+        fi
+
+        TF_APPLY_RETRIES=$((TF_APPLY_RETRIES+1))
+        if [ $TF_APPLY_RETRIES -lt $TF_APPLY_MAX_RETRIES ]; then
+            echo "  Retrying infrastructure deployment ($TF_APPLY_RETRIES/$TF_APPLY_MAX_RETRIES)..."
+            sleep 2
+            continue
+        fi
+    fi
+
+    # If not a recoverable error, fail
+    echo "$TF_OUTPUT"
+    exit 1
+done
+
+if [ "$TF_APPLY_SUCCESS" = false ]; then
+    echo -e "${RED}✗ Infrastructure deployment failed after retries${NC}"
+    exit 1
+fi
 
 echo -e "${GREEN}✓${NC} Infrastructure deployed"
 
