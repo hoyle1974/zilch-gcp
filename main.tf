@@ -490,6 +490,14 @@ resource "google_project_iam_member" "bigquery_data_editor" {
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
+# IAM: Allow Cloud Run to run BigQuery jobs
+resource "google_project_iam_member" "bigquery_job_user" {
+  count   = var.enable_bigquery ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
 # Enable Cloud KMS API
 resource "google_project_service" "kms" {
   count   = var.enable_cloud_kms ? 1 : 0
@@ -591,9 +599,9 @@ resource "google_project_iam_member" "translate_client" {
 # Firestore Native mode provides ACID transactions and SQL-like queries.
 # Now provisioned directly via Terraform with appropriate IAM setup.
 resource "google_firestore_database" "default" {
-  count       = var.enable_firestore ? 1 : 0
-  project     = var.gcp_project_id
-  name        = "(default)"
+  count   = var.enable_firestore ? 1 : 0
+  project = var.gcp_project_id
+  name    = "(default)"
   # Firestore multi-region locations: nam5 (North America), eur3 (Europe)
   # All three US regions (us-central1, us-east1, us-west1) map to nam5
   location_id = "nam5"
@@ -604,7 +612,7 @@ resource "google_firestore_database" "default" {
 resource "google_project_iam_member" "firestore" {
   count   = var.enable_firestore ? 1 : 0
   project = var.gcp_project_id
-  role    = "roles/datastore.user"
+  role    = "roles/datastore.editor"
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
@@ -688,4 +696,18 @@ resource "google_project_iam_member" "vertex_ai" {
   role       = "roles/aiplatform.user"
   member     = "serviceAccount:${google_service_account.app.email}"
   depends_on = [google_project_service.aiplatform]
+}
+
+# Cloud Logging: Allow Cloud Run to write logs
+resource "google_project_iam_member" "logging_writer" {
+  project = var.gcp_project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+# Cloud Monitoring: Allow Cloud Run to write metrics
+resource "google_project_iam_member" "monitoring_writer" {
+  project = var.gcp_project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.app.email}"
 }
