@@ -201,6 +201,14 @@ gcloud kms keyrings list --location=us-central1 --project="$PROJECT_ID" --filter
     [ -n "$keyring" ] && gcloud kms keyrings delete "$keyring" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
 done
 
+echo "  Deleting Cloud Build triggers..."
+gcloud builds triggers delete "${APP_NAME}-trigger" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+echo "  Deleting Cloud Tasks queues..."
+gcloud cloud-tasks queues list --project="$PROJECT_ID" --location=us-central1 --filter="name:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r queue; do
+    [ -n "$queue" ] && gcloud cloud-tasks queues delete "$queue" --location=us-central1 --project="$PROJECT_ID" --quiet 2>/dev/null || true
+done
+
 echo "  Deleting billing budgets..."
 if [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
     gcloud beta billing budgets list --billing-account="$GCP_BILLING_ACCOUNT_ID" \
