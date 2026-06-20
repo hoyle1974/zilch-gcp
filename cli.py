@@ -168,13 +168,14 @@ def _render_menu(console: Console, services: List[Dict[str, str | bool]], curren
     for i, service in enumerate(services):
         checkbox = "[x]" if service["enabled"] else "[ ]"
         name = service["name"]
+        cursor = "→ " if i == current_index else "  "
 
         if i == current_index:
-            style = Style(color="cyan", bold=True, reverse=True)
-            line = f"{checkbox} {name}"
+            style = Style(color="cyan", bold=True)
+            line = f"{cursor}{checkbox} {name}"
             console.print(line, style=style)
         else:
-            click.echo(f"{checkbox} {name}")
+            click.echo(f"{cursor}{checkbox} {name}")
 
 
 def _get_key() -> str:
@@ -186,6 +187,8 @@ def _get_key() -> str:
     if os.name == 'nt':  # Windows
         import msvcrt
         key = msvcrt.getch()
+        if key == b'\x03':  # Ctrl+C
+            raise KeyboardInterrupt()
         if key == b'\xe0':  # Arrow key prefix on Windows
             next_key = msvcrt.getch()
             if next_key == b'H':
@@ -204,6 +207,8 @@ def _get_key() -> str:
         try:
             tty.setraw(fd)
             ch = sys.stdin.read(1)
+            if ch == '\x03':  # Ctrl+C
+                raise KeyboardInterrupt()
             if ch == '\x1b':  # Escape sequence
                 sys.stdin.read(1)  # Skip '['
                 ch = sys.stdin.read(1)

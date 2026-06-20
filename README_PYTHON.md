@@ -82,7 +82,7 @@ zilch.py           # Main entry point (commands: deploy, teardown, status)
 **`cli.py`**
 - Interactive prompt functions (using Click)
 - `get_project_id()`, `get_app_name()`, `get_region()`
-- `get_services()`: Service menu with toggles
+- `get_services_interactive()`: Interactive arrow-key service menu with toggles
 - `get_scheduler_config()`, `get_monitoring_config()`
 
 **`health_check.py`**
