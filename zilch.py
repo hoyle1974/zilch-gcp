@@ -533,6 +533,15 @@ def _reconcile_state(tf: TerraformExecutor, config: ZilchConfig) -> None:
             )
         )
 
+    if config.enable_cloud_kms:
+        resources.append(
+            (
+                "google_kms_key_ring.app_keys[0]",
+                f"projects/{config.gcp_project_id}/locations/{config.gcp_region}/keyRings/{config.app_name}-keyring",
+                "KMS KeyRing",
+            )
+        )
+
     importer = ParallelImporter(tf)
     importer.import_all(resources, config.to_terraform_vars())
 
