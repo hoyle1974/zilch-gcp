@@ -248,10 +248,6 @@ def _render_menu(console: Console, services: List[Dict[str, str | bool]], curren
     click.echo("Use arrow keys to navigate, space to toggle, enter to confirm")
     click.echo()
 
-    # Get details for selected service
-    selected = services[current_index]
-    meta = SERVICE_METADATA.get(selected["key"], {})
-
     # Left column width + divider + right column width
     left_width = 30
     divider = " │ "
@@ -265,21 +261,27 @@ def _render_menu(console: Console, services: List[Dict[str, str | bool]], curren
         # Pad left side to fixed width
         left_padded = left_line.ljust(left_width)
 
-        # Add details on the right for selected row only
+        # Get description for this service
+        meta = SERVICE_METADATA.get(service["key"], {})
+        right_text = meta.get("description", "")
+
+        # Combine left and right
+        full_line = f"{left_padded}{divider}{right_text}"
+
+        # Style selected row
         if i == current_index:
-            right_text = meta.get("description", "")
-            full_line = f"{left_padded}{divider}{right_text}"
             styled_line = click.style(full_line, fg="cyan", bold=True)
             click.echo(styled_line)
         else:
-            click.echo(left_padded + divider)
+            click.echo(full_line)
 
     # Show full details below the list
     click.echo()
-    if meta:
-        click.echo(click.style("Details:", fg="cyan", bold=True))
-        click.echo(f"  Docs: {meta.get('docs', 'N/A')}")
-        click.echo(f"  Cost: {meta.get('cost', 'N/A')}")
+    selected = services[current_index]
+    meta = SERVICE_METADATA.get(selected["key"], {})
+    click.echo(click.style("Details for " + selected["name"] + ":", fg="cyan", bold=True))
+    click.echo(f"  Docs: {meta.get('docs', 'N/A')}")
+    click.echo(f"  Cost: {meta.get('cost', 'N/A')}")
 
 
 def _get_key() -> str:
