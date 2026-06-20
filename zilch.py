@@ -174,6 +174,13 @@ def teardown(force: bool) -> None:
         click.echo(click.style("⚠️  WARNING: This action is IRREVERSIBLE", fg="red"))
         click.echo()
 
+        # Prerequisites check
+        section("Prerequisites")
+        gcp.check_required_tools()
+        current_user = gcp.validate_gcloud_auth()
+        success(f"Authenticated as {cyan(current_user)}")
+        click.echo()
+
         # Load config
         if not Path(".zilch.config").exists():
             error("Config file not found: .zilch.config")
@@ -187,16 +194,48 @@ def teardown(force: bool) -> None:
 
         success(f"Loaded config for {cyan(config.app_name)}")
 
-        # Confirm
+        # Validate project exists and user has access
+        try:
+            gcp.validate_project(config.gcp_project_id)
+            success(f"Project found: {cyan(config.gcp_project_id)}")
+        except gcp.GCPError as e:
+            error(str(e))
+            sys.exit(1)
+
+        click.echo()
+
+        # Show what will be deleted
         if not force:
-            if not click.confirm("Destroy all infrastructure?", default=False):
+            click.echo(click.style("🚨 FINAL WARNING 🚨", fg="red"))
+            click.echo()
+            click.echo("You are about to DELETE:")
+            click.echo(f"  • Cloud Run service: {config.app_name}")
+            click.echo("  • All enabled services (Firestore, Storage, Pub/Sub, etc.)")
+            click.echo("  • Service accounts and IAM bindings")
+            click.echo(f"  • Terraform state bucket: {config.gcp_project_id}-zilch-tfstate")
+            click.echo()
+            click.echo("This CANNOT be undone. All running applications will stop.")
+            click.echo()
+
+            # First confirmation: type 'destroy'
+            confirmation1 = click.prompt("Type 'destroy' to confirm teardown", type=str)
+            if confirmation1 != "destroy":
                 warning("Teardown cancelled")
                 sys.exit(0)
 
-        # GCP setup
-        gcp.check_required_tools()
-        gcp.validate_gcloud_auth()
-        gcp.validate_project(config.gcp_project_id)
+            click.echo()
+
+            # Second confirmation: type project ID
+            confirmation2 = click.prompt(f"Type '{config.gcp_project_id}' to confirm project ID", type=str)
+            if confirmation2 != config.gcp_project_id:
+                error("Project ID mismatch. Teardown cancelled.")
+                sys.exit(1)
+
+            click.echo()
+            click.echo("🔓 Understood. Proceeding with teardown...")
+            click.echo()
+
+        # Set GCP project context
         gcp.set_project_context(config.gcp_project_id)
 
         # Run Terraform destroy
