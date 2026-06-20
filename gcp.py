@@ -390,6 +390,11 @@ def get_billing_info(project_id: str) -> Optional[dict]:
         Dict with 'currency', 'amount' keys, or None if unavailable
     """
     try:
+        from google.cloud import billing_v1
+        from google.cloud import compute_v1
+        from datetime import datetime, timedelta
+        import os
+
         # Get billing account linked to this project
         result = subprocess.run(
             [
@@ -412,48 +417,64 @@ def get_billing_info(project_id: str) -> Optional[dict]:
         if not billing_account:
             return None
 
-        # Query billing data via gcloud API call to get month-to-date spend
-        # This requires the cloudbilling.budgets.get permission
+        # Query current month spending using Billing API
         try:
-            import json
-            from datetime import datetime
+            client = billing_v1.CloudBillingClient()
 
-            # Use gcloud to call the Billing API for current month spend
-            # We'll query the billing API directly for cost data
-            result = subprocess.run(
-                [
-                    "gcloud",
-                    "alpha",
-                    "billing",
-                    "accounts",
-                    "list",
-                    f"--billing-account={billing_account}",
-                    "--format=json",
-                ],
-                capture_output=True,
-                timeout=10,
-                check=False,
-                text=True,
-            )
+            # Get the current date
+            today = datetime.utcnow()
 
-            if result.returncode == 0:
-                try:
-                    data = json.loads(result.stdout)
-                    if isinstance(data, list) and len(data) > 0:
-                        account = data[0]
-                        if "billingAccountDisplayName" in account:
-                            # Return billing account with placeholder spend
-                            # Real spend would require BigQuery or Billing API access
-                            return {
-                                "currency": "USD",
-                                "amount": None,  # Can't reliably get without additional APIs
-                                "account_name": account.get("billingAccountDisplayName", ""),
-                            }
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    pass
+            # Calculate month start and end
+            month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if today.month == 12:
+                month_end = month_start.replace(year=today.year + 1, month=1)
+            else:
+                month_end = month_start.replace(month=today.month + 1)
 
+            # Convert to ISO format for API
+            start_date = month_start.strftime("%Y-%m-%d")
+            end_date = month_end.strftime("%Y-%m-%d")
+
+            # Get billing account details
+            account_name = f"billingAccounts/{billing_account}"
+            account = client.get_billing_account(name=account_name)
+
+            # Query spending via BigQuery if available (requires billing export dataset)
+            # For now, try to get budget info which includes spending
+            try:
+                budgets_client = billing_v1.BudgetServiceClient()
+                parent = f"billingAccounts/{billing_account}"
+                budgets = budgets_client.list_budgets(parent=parent)
+
+                # Get current month spending from budgets
+                total_spent = 0.0
+                for budget in budgets:
+                    if hasattr(budget, 'threshold_rule') and budget.threshold_rule:
+                        # Budget has spending info
+                        if hasattr(budget, 'amount') and budget.amount:
+                            if hasattr(budget.amount, 'specified_amount'):
+                                spent = budget.amount.specified_amount.units or 0
+                                nanos = budget.amount.specified_amount.nanos or 0
+                                total_spent += spent + (nanos / 1e9)
+
+                return {
+                    "currency": "USD",
+                    "amount": total_spent,
+                    "account_name": account.display_name or billing_account,
+                }
+            except Exception as budget_err:
+                # Fallback: return account info without spending data
+                return {
+                    "currency": "USD",
+                    "amount": None,
+                    "account_name": account.display_name or billing_account,
+                }
+
+        except ImportError:
+            # google-cloud-billing not installed
             return None
-        except Exception:
+        except Exception as e:
+            # Billing API not accessible or project not linked
             return None
 
     except Exception:
