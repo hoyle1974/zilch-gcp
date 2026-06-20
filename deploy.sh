@@ -1072,6 +1072,81 @@ if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
     fi
 fi
 
+# Cloud Tasks Queue
+if [ "$ENABLE_CLOUD_TASKS" == "true" ]; then
+    QUEUE_NAME=$(gcloud tasks queues list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-jobs" --format="value(name)" 2>/dev/null | head -1)
+    if [ -n "$QUEUE_NAME" ]; then
+        if ! is_in_terraform_state "google_cloud_tasks_queue.app_jobs[0]"; then
+            echo -e "${BLUE}→${NC} Found Cloud Tasks queue in GCP but not in Terraform state"
+            if import_resource "google_cloud_tasks_queue.app_jobs[0]" "$QUEUE_NAME"; then
+                echo -e "${GREEN}✓${NC} Imported Cloud Tasks queue"
+            else
+                echo -e "${RED}✗${NC} Failed to import Cloud Tasks queue"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Cloud Tasks queue already in Terraform state"
+        fi
+    fi
+fi
+
+# Budget Alerts Subscription
+if [ "$ENABLE_MONITORING" == "true" ]; then
+    ALERTS_SUB="${APP_NAME}-budget-alerts-sub"
+    if gcloud pubsub subscriptions describe "$ALERTS_SUB" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+        if ! is_in_terraform_state "google_pubsub_subscription.budget_alerts_sub[0]"; then
+            echo -e "${BLUE}→${NC} Found Pub/Sub subscription ${CYAN}${ALERTS_SUB}${NC} in GCP but not in Terraform state"
+            if import_resource "google_pubsub_subscription.budget_alerts_sub[0]" "projects/${PROJECT_ID}/subscriptions/${ALERTS_SUB}"; then
+                echo -e "${GREEN}✓${NC} Imported budget alerts subscription"
+            else
+                echo -e "${RED}✗${NC} Failed to import budget alerts subscription"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Budget alerts subscription already in Terraform state"
+        fi
+    fi
+fi
+
+# KMS Key Ring
+if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
+    KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
+    if [ -n "$KEYRING" ]; then
+        if ! is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
+            echo -e "${BLUE}→${NC} Found KMS key ring in GCP but not in Terraform state"
+            if import_resource "google_kms_key_ring.app_keys[0]" "${GCP_REGION}/${KEYRING}"; then
+                echo -e "${GREEN}✓${NC} Imported KMS key ring"
+            else
+                echo -e "${RED}✗${NC} Failed to import KMS key ring"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} KMS key ring already in Terraform state"
+        fi
+    fi
+fi
+
+# KMS Crypto Key
+if [ "$ENABLE_CLOUD_KMS" == "true" ]; then
+    if is_in_terraform_state "google_kms_key_ring.app_keys[0]"; then
+        if ! is_in_terraform_state "google_kms_crypto_key.app_key[0]"; then
+            CRYPTOKEY="${APP_NAME}-key"
+            KEYRING=$(gcloud kms keyrings list --location="${GCP_REGION}" --project="${PROJECT_ID}" --filter="name:${APP_NAME}-keyring" --format="value(name)" 2>/dev/null | head -1)
+            if [ -n "$KEYRING" ] && gcloud kms keys list --location="${GCP_REGION}" --keyring="${KEYRING}" --project="${PROJECT_ID}" --filter="name:${CRYPTOKEY}" &>/dev/null 2>&1; then
+                echo -e "${BLUE}→${NC} Found KMS crypto key in GCP but not in Terraform state"
+                if import_resource "google_kms_crypto_key.app_key[0]" "${GCP_REGION}/${KEYRING}/cryptoKeys/${CRYPTOKEY}"; then
+                    echo -e "${GREEN}✓${NC} Imported KMS crypto key"
+                else
+                    echo -e "${RED}✗${NC} Failed to import KMS crypto key"
+                    exit 1
+                fi
+            fi
+        else
+            echo -e "${GREEN}✓${NC} KMS crypto key already in Terraform state"
+        fi
+    fi
+fi
+
 echo ""
 echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
