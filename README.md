@@ -82,6 +82,7 @@ This builds and deploys your application. For automatic deployments on git push,
 | Vision AI | 1,000 images/month | `enable_vision_ai` |
 | Speech-to-Text | 60 minutes/month | `enable_speech_to_text` |
 | Translation | 500K characters/month | `enable_translation` |
+| MySQL Database | ~$1.26/month | `enable_mysql` |
 
 ## File Structure
 
@@ -136,6 +137,61 @@ if os.getenv('ZILCH_FIRESTORE_DATABASE'):
 ```
 
 All Google Cloud SDKs use **Application Default Credentials (ADC)**, which automatically authenticates as your app's service account.
+
+### MySQL Database
+
+If you enabled MySQL, your Cloud Run service automatically receives connection details:
+
+```python
+import mysql.connector
+import os
+
+if os.getenv('ZILCH_MYSQL_HOST'):
+    db = mysql.connector.connect(
+        host=os.getenv('ZILCH_MYSQL_HOST'),
+        port=int(os.getenv('ZILCH_MYSQL_PORT', 3306)),
+        user=os.getenv('ZILCH_MYSQL_USER'),
+        password=os.getenv('ZILCH_MYSQL_PASSWORD'),
+        database=os.getenv('ZILCH_MYSQL_DATABASE')
+    )
+    cursor = db.cursor()
+    cursor.execute("SELECT 1")
+```
+
+**Manage your database schema:**
+
+```bash
+# Create new migration
+cat > db/migrations/002-add-users-table.sql <<EOF
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL
+);
+EOF
+
+# Apply migrations
+./db/migrate.sh up
+
+# Check status
+./db/migrate.sh status
+```
+
+**Direct access (local development):**
+
+```bash
+# Install Cloud SQL Proxy
+cloud-sql-proxy compute/PROJECT_ID/REGION/zilch-mysql-vm &
+
+# Connect locally
+mysql -h 127.0.0.1 -u zilch_user -p
+```
+
+**Direct access (SSH bastion):**
+
+```bash
+gcloud compute ssh zilch-mysql-vm --zone=us-central1-a
+mysql -u zilch_user -p
+```
 
 ## Environment Variables
 
@@ -213,6 +269,26 @@ This happens if a deployment was interrupted. Zilch automatically detects and of
 
 ### Deployment fails with "Already Exists" error
 Zilch automatically detects and imports existing resources. If you see this error, the script should handle recovery automatically. If not, see the manual cleanup section below.
+
+### MySQL Connection Errors
+
+If your app can't connect to MySQL:
+
+1. Verify MySQL is running:
+   ```bash
+   gcloud compute instances list | grep mysql
+   ```
+
+2. Check Cloud SQL Proxy logs in Cloud Run:
+   ```bash
+   gcloud run logs read YOUR_APP_NAME --limit=50
+   ```
+
+3. Test direct connection:
+   ```bash
+   cloud-sql-proxy compute/PROJECT_ID/REGION/zilch-mysql-vm &
+   mysql -h 127.0.0.1 -u zilch_user -p
+   ```
 
 ### Manual Resource Cleanup
 
