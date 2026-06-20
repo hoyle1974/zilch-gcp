@@ -38,6 +38,7 @@ echo "✓ Authenticated as: ${CURRENT_USER}"
 
 PROJECT_ID=""
 APP_NAME=""
+GCP_BILLING_ACCOUNT_ID=""
 
 if [ -f ".zilch.config" ]; then
     echo "📋 Reading .zilch.config..."
@@ -49,6 +50,7 @@ if [ -f ".zilch.config" ]; then
         value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         [ "$key" = "gcp_project_id" ] && PROJECT_ID="$value"
         [ "$key" = "app_name" ] && APP_NAME="$value"
+        [ "$key" = "gcp_billing_account_id" ] && GCP_BILLING_ACCOUNT_ID="$value"
     done < .zilch.config
 fi
 
@@ -150,6 +152,36 @@ echo "✓ Terraform resources destroyed"
 # --- CLEANUP STATE BUCKET ---
 
 STATE_BUCKET="${PROJECT_ID}-zilch-tfstate"
+echo ""
+echo "🧹 Cleaning up remaining resources..."
+
+# Manually delete resources that Terraform couldn't handle
+echo "  Deleting Cloud Run services..."
+gcloud run services delete "${APP_NAME}" --region="us-central1" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+echo "  Deleting service accounts..."
+gcloud iam service-accounts delete "${APP_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+gcloud iam service-accounts delete "${APP_NAME}-builder@${PROJECT_ID}.iam.gserviceaccount.com" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+echo "  Deleting Pub/Sub topics..."
+gcloud pubsub topics delete "${APP_NAME}-budget-alerts" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+gcloud pubsub topics delete "${APP_NAME}-events" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+echo "  Deleting Firestore databases..."
+gcloud firestore databases delete --database='(default)' --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+echo "  Deleting billing budgets..."
+if [ -n "$GCP_BILLING_ACCOUNT_ID" ]; then
+    # Find and delete any budgets for this app
+    gcloud beta billing budgets list --billing-account="$GCP_BILLING_ACCOUNT_ID" \
+        --filter="displayName:${APP_NAME}" --format="value(name)" 2>/dev/null | while read -r budget_name; do
+        if [ -n "$budget_name" ]; then
+            gcloud beta billing budgets delete "$budget_name" --quiet 2>/dev/null || true
+        fi
+    done
+fi
+
+echo "  ✓ Manual cleanup complete"
 echo ""
 echo "🗑️  Cleaning up state bucket: gs://${STATE_BUCKET}..."
 
