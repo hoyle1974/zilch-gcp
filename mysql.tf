@@ -47,11 +47,11 @@ resource "google_compute_instance" "mysql" {
     enable-oslogin = "true"
   }
 
-  metadata_startup_script = base64encode(templatefile("${path.root}/scripts/mysql-startup.sh", {
+  metadata_startup_script = templatefile("${path.root}/scripts/mysql-startup.sh", {
     RESOURCE_SUFFIX = local.mysql_resource_suffix
     PROJECT_ID      = var.gcp_project_id
     MYSQL_PORT      = random_integer.mysql_port[0].result
-  }))
+  })
 
   service_account {
     email  = google_service_account.mysql[0].email
