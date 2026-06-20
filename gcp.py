@@ -390,6 +390,7 @@ def get_billing_info(project_id: str) -> Optional[dict]:
         Dict with 'currency', 'amount' keys, or None if unavailable
     """
     try:
+        # Get billing account linked to this project
         result = subprocess.run(
             [
                 "gcloud",
@@ -403,7 +404,7 @@ def get_billing_info(project_id: str) -> Optional[dict]:
             ],
             capture_output=True,
             timeout=10,
-            check=True,
+            check=False,
             text=True,
         )
 
@@ -411,45 +412,49 @@ def get_billing_info(project_id: str) -> Optional[dict]:
         if not billing_account:
             return None
 
-        # Query current month-to-date spending via billing API
-        result = subprocess.run(
-            [
-                "gcloud",
-                "billing",
-                "accounts",
-                "describe",
-                billing_account,
-                "--format",
-                "value(billingAccountDisplayName,masterBillingAccount)",
-            ],
-            capture_output=True,
-            timeout=10,
-            check=False,
-            text=True,
-        )
+        # Query billing data via gcloud API call to get month-to-date spend
+        # This requires the cloudbilling.budgets.get permission
+        try:
+            import json
+            from datetime import datetime
 
-        # Try to get spending via Cloud Billing API
-        result = subprocess.run(
-            [
-                "gcloud",
-                "beta",
-                "billing",
-                "accounts",
-                "get-spending-summary",
-                f"--billing-account={billing_account}",
-                "--format=value(amount)",
-            ],
-            capture_output=True,
-            timeout=10,
-            check=False,
-            text=True,
-        )
+            # Use gcloud to call the Billing API for current month spend
+            # We'll query the billing API directly for cost data
+            result = subprocess.run(
+                [
+                    "gcloud",
+                    "alpha",
+                    "billing",
+                    "accounts",
+                    "list",
+                    f"--billing-account={billing_account}",
+                    "--format=json",
+                ],
+                capture_output=True,
+                timeout=10,
+                check=False,
+                text=True,
+            )
 
-        if result.returncode == 0 and result.stdout.strip():
-            amount = float(result.stdout.strip())
-            return {"currency": "USD", "amount": amount}
+            if result.returncode == 0:
+                try:
+                    data = json.loads(result.stdout)
+                    if isinstance(data, list) and len(data) > 0:
+                        account = data[0]
+                        if "billingAccountDisplayName" in account:
+                            # Return billing account with placeholder spend
+                            # Real spend would require BigQuery or Billing API access
+                            return {
+                                "currency": "USD",
+                                "amount": None,  # Can't reliably get without additional APIs
+                                "account_name": account.get("billingAccountDisplayName", ""),
+                            }
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    pass
 
-        return None
+            return None
+        except Exception:
+            return None
 
     except Exception:
         return None

@@ -68,16 +68,26 @@ def print_deployment_summary(config: dict, outputs: dict, billing_info: dict = N
     click.echo(f"  Region:    {cyan(config.get('gcp_region', 'us-central1'))}")
 
     # Show billing info if available
-    if billing_info and 'amount' in billing_info:
-        amount = billing_info['amount']
-        currency = billing_info.get('currency', 'USD')
+    if billing_info:
         budget = config.get('billing_budget_limit_usd')
         if budget:
             budget_float = float(budget) if isinstance(budget, str) else budget
-            percentage = (amount / budget_float * 100) if budget_float > 0 else 0
-            click.echo(f"  Billing:   {yellow(f'${amount:.2f} USD')} / {cyan(f'${budget_float:.2f} USD')} ({percentage:.1f}%)")
+            budget_text = f"Budget: {cyan(f'${budget_float:.2f} USD/month')}"
         else:
-            click.echo(f"  Billing:   {yellow(f'${amount:.2f} USD')} (current month)")
+            budget_text = "(No budget set)"
+
+        if billing_info.get('amount') is not None:
+            amount = billing_info['amount']
+            if budget and budget_float > 0:
+                percentage = (amount / budget_float * 100)
+                click.echo(f"  Spend:     {yellow(f'${amount:.2f} USD')} / {cyan(f'${budget_float:.2f} USD')} ({percentage:.1f}%)")
+            else:
+                click.echo(f"  Spend:     {yellow(f'${amount:.2f} USD')} (current month)")
+        else:
+            click.echo(f"  Spend:     {budget_text}")
+    elif config.get('billing_budget_limit_usd'):
+        budget_float = float(config.get('billing_budget_limit_usd'))
+        click.echo(f"  Spend:     Budget: {cyan(f'${budget_float:.2f} USD/month')} (actual spend unavailable)")
     click.echo()
 
     click.echo(bold("Configured Services:"))
