@@ -745,14 +745,8 @@ echo -e "${BLUE}→${NC} Applying infrastructure"
 # Export quota project for billing API access in Terraform
 export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 
-# Refresh state before apply to catch resources created outside of Terraform
-# This prevents "already exists" errors on redeploy
-echo -e "${BLUE}→${NC} Refreshing state"
-if terraform -chdir="$(dirname "$0")" refresh 2>&1 | grep -qE "Error|error"; then
-    echo -e "${YELLOW}⚠${NC} State refresh had issues but continuing"
-else
-    echo -e "${GREEN}✓${NC} State refreshed"
-fi
+# Terraform apply will refresh state automatically, so we don't need a separate refresh step
+# But we do need retry logic for "already exists" errors on redeploy
 
 TF_APPLY_SUCCESS=false
 TF_APPLY_RETRIES=0
