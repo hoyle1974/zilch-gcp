@@ -20,17 +20,26 @@ You get:
 
 ## Getting Started
 
-### 1. Open Cloud Shell
+### ⭐ Recommended: Use Google Cloud Shell (No Installation Required)
 
-Click the **Cloud Shell** button in your GCP project or visit: https://shell.cloud.google.com
+Cloud Shell has everything pre-installed: `gcloud`, `terraform`, `curl`, `bq`. No local setup needed.
 
-### 2. Clone and Deploy
+1. **Open Cloud Shell:** https://shell.cloud.google.com (or click the terminal icon in your GCP Console)
+2. **Clone and run:**
+   ```bash
+   git clone https://github.com/hoyle1974/zilch-gcp.git
+   cd zilch-gcp
+   chmod +x deploy.sh teardown.sh && ./deploy.sh
+   ```
 
-```bash
-git clone https://github.com/hoyle1974/zilch-gcp.git
-cd zilch-gcp
-chmod +x deploy.sh && ./deploy.sh
-```
+### Alternative: Local Installation
+
+If you prefer to run locally, install:
+- **gcloud CLI:** https://cloud.google.com/sdk/docs/install
+- **Terraform:** https://www.terraform.io/downloads
+- Then run: `./deploy.sh`
+
+### Standard Workflow
 
 ### 3. Answer Configuration Prompts
 
@@ -142,6 +151,23 @@ ZILCH_VERTEX_AI_ENABLED   → "true" (if Vertex AI enabled)
 ZILCH_FIREBASE_ENABLED    → "true" (if Firebase Auth enabled)
 ```
 
+## Cleanup & Teardown
+
+To remove all resources and shut down your application:
+
+```bash
+./teardown.sh
+```
+
+This safely deletes:
+- Cloud Run service
+- All service accounts and IAM bindings
+- Storage buckets and databases
+- Secrets and configuration
+- Terraform state bucket
+
+**Note:** KMS keyrings are scheduled for deletion (30-day GCP retention period).
+
 ## Monitoring & Logs
 
 View your app's logs:
@@ -156,9 +182,20 @@ Monitor resource usage:
 gcloud run services describe YOUR_APP_NAME --region=us-central1
 ```
 
+## Reliability & Robustness
+
+Zilch deployment scripts include automatic recovery mechanisms:
+
+- **Stale Lock Detection** — Detects and recovers from interrupted deployments
+- **Resource Import Recovery** — Automatically imports existing resources (e.g., BigQuery datasets) to prevent conflicts
+- **Idempotent Deployments** — Safe to redeploy without manual cleanup
+- **Tool Validation** — Clear error messages if required tools are missing
+- **Cloud Shell Integration** — Detects and recommends Cloud Shell for zero-setup deployments
+- **Graceful Error Handling** — Continues cleanup even if some resources fail to delete
+
 ## Troubleshooting
 
-### "Active gcloud credential context not discovered"
+### "No active gcloud authentication found"
 ```bash
 gcloud auth login
 ```
@@ -171,8 +208,30 @@ Double-check your Project ID and ensure you have IAM permissions.
 - Ensure your app listens on `$PORT` (default: 8080)
 - Check that startup completes within 5 minutes
 
-### "State bucket already exists"
-This is normal on subsequent runs. Zilch reuses the existing bucket.
+### "Terraform state is locked"
+This happens if a deployment was interrupted. Zilch automatically detects and offers to recover from stale locks.
+
+### Deployment fails with "Already Exists" error
+Zilch automatically detects and imports existing resources. If you see this error, the script should handle recovery automatically. If not, see the manual cleanup section below.
+
+### Manual Resource Cleanup
+
+If automated cleanup doesn't work, manually delete resources:
+
+```bash
+# Cloud Run service
+gcloud run services delete YOUR_APP_NAME --region=REGION --quiet
+
+# Service accounts
+gcloud iam service-accounts delete YOUR_APP_NAME@PROJECT_ID.iam.gserviceaccount.com --quiet
+gcloud iam service-accounts delete YOUR_APP_NAME-builder@PROJECT_ID.iam.gserviceaccount.com --quiet
+
+# Storage buckets
+gcloud storage buckets delete gs://BUCKET_NAME --quiet
+
+# State bucket
+gcloud storage buckets delete gs://PROJECT_ID-zilch-tfstate --quiet
+```
 
 ## Documentation & Knowledge Base
 
