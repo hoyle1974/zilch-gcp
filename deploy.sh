@@ -782,9 +782,19 @@ import_resource() {
         -var="gcp_project_id=${PROJECT_ID}" \
         -var="app_name=${APP_NAME}" \
         -var="gcp_region=${GCP_REGION}" \
+        -var="enable_bigquery=${ENABLE_BIGQUERY}" \
+        -var="enable_pubsub=${ENABLE_PUBSUB}" \
+        -var="enable_scheduler=${ENABLE_SCHEDULER}" \
+        -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
+        -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
+        -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
         "${resource_type}" "${resource_id}" 2>&1)
 
     if echo "$output" | grep -qE "Successfully imported|Import successful"; then
+        return 0
+    elif echo "$output" | grep -q "Configuration for import target does not exist"; then
+        # Resource config doesn't exist (feature disabled or not configured)
+        # Will be created/skipped based on terraform apply
         return 0
     else
         echo "$output"
