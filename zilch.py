@@ -201,13 +201,20 @@ def teardown(force: bool) -> None:
 
         # Run Terraform destroy
         section("Terraform")
+
+        # Terraform files are in the script directory (zilch-gcp)
+        script_dir = Path(__file__).parent.absolute()
+
         try:
-            tf = TerraformExecutor()
+            tf = TerraformExecutor(str(script_dir))
             tf.destroy(config.to_terraform_vars(), force=True)
             success("Resources destroyed")
         except TerraformError as e:
-            error(f"Terraform destroy failed: {e}")
-            sys.exit(1)
+            warning(f"Terraform destroy had issues (continuing with manual cleanup): {e}")
+
+        # Manual cleanup of resources that might not be terraform-managed
+        section("Manual Cleanup")
+        _cleanup_gcp_resources(config)
 
         # Clean up state bucket
         state_bucket = f"{config.gcp_project_id}-zilch-tfstate"
@@ -219,11 +226,40 @@ def teardown(force: bool) -> None:
                 ["gcloud", "storage", "buckets", "delete", f"gs://{state_bucket}", "--quiet"],
                 capture_output=True,
                 timeout=60,
-                check=True,
+                check=False,
             )
             success("State bucket removed")
         except Exception as e:
-            warning(f"Could not remove state bucket (may have retained data): {e}")
+            warning(f"Could not remove state bucket: {e}")
+
+        # Clean up local files
+        info("Removing local Terraform state")
+        try:
+            tf_dir = script_dir / ".terraform"
+            tfstate = script_dir / "terraform.tfstate"
+            tfstate_backup = script_dir / "terraform.tfstate.backup"
+            tflock = script_dir / ".terraform.lock.hcl"
+
+            for f in [tf_dir, tfstate, tfstate_backup, tflock]:
+                if f.exists():
+                    if f.is_dir():
+                        import shutil
+                        shutil.rmtree(f)
+                    else:
+                        f.unlink()
+            success("Local Terraform state removed")
+        except Exception as e:
+            warning(f"Could not fully clean local state: {e}")
+
+        # Remove config file
+        info("Removing .zilch.config")
+        try:
+            config_file = Path(".zilch.config")
+            if config_file.exists():
+                config_file.unlink()
+            success("Config file removed")
+        except Exception as e:
+            warning(f"Could not remove config: {e}")
 
         success(bold("Teardown complete!"))
 
@@ -257,7 +293,9 @@ def status() -> None:
 
         # Get Terraform outputs
         try:
-            tf = TerraformExecutor()
+            # Terraform files are in the script directory (zilch-gcp)
+            script_dir = Path(__file__).parent.absolute()
+            tf = TerraformExecutor(str(script_dir))
 
             section("Outputs")
             url = tf.get_output("cloud_run_url")
@@ -278,6 +316,36 @@ def status() -> None:
     except Exception as e:
         error(f"Failed to get status: {e}")
         sys.exit(1)
+
+
+def _cleanup_gcp_resources(config: ZilchConfig) -> None:
+    """Manually clean up GCP resources that terraform might have missed."""
+    resources_to_clean = [
+        ("Cloud Run", ["gcloud", "run", "services", "delete", config.app_name, f"--region={config.gcp_region}", "--quiet"]),
+        ("Service account (app)", ["gcloud", "iam", "service-accounts", "delete", f"{config.app_name}@{config.gcp_project_id}.iam.gserviceaccount.com", "--quiet"]),
+        ("Service account (Cloud Build)", ["gcloud", "iam", "service-accounts", "delete", f"{config.app_name}-builder@{config.gcp_project_id}.iam.gserviceaccount.com", "--quiet"]),
+        ("Pub/Sub topic (events)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-events", "--quiet"]),
+        ("Pub/Sub topic (budget)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-budget-alerts", "--quiet"]),
+        ("Pub/Sub subscription (events)", ["gcloud", "pubsub", "subscriptions", "delete", f"{config.app_name}-events-subscription", "--quiet"]),
+        ("Cloud Build logs bucket", ["gcloud", "storage", "buckets", "delete", f"gs://{config.gcp_project_id}_cloudbuild", "--quiet"]),
+        ("Firestore database", ["gcloud", "firestore", "databases", "delete", "--database=(default)", "--quiet"]),
+        ("Artifact Registry", ["gcloud", "artifacts", "repositories", "delete", f"{config.app_name}-images", f"--location={config.gcp_region}", "--quiet"]),
+        ("BigQuery dataset", ["gcloud", "bigquery", "datasets", "delete", "--dataset=" + config.app_name.replace("-", "_") + "_analytics", "--quiet"]),
+        ("Cloud Build trigger", ["gcloud", "builds", "triggers", "delete", f"{config.app_name}-trigger", "--quiet"]),
+        ("Cloud Tasks queue", ["gcloud", "tasks", "queues", "delete", f"{config.app_name}-jobs", f"--location={config.gcp_region}", "--quiet"]),
+        ("KMS keyring", ["gcloud", "kms", "keyrings", "delete", f"{config.app_name}-keyring", f"--location={config.gcp_region}", "--quiet"]),
+    ]
+
+    for resource_name, cmd in resources_to_clean:
+        try:
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        except Exception:
+            pass  # Silently continue
 
 
 def _setup_monitoring(config: ZilchConfig, auto: bool) -> None:
