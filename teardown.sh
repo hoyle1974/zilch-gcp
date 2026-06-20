@@ -22,6 +22,34 @@ echo ""
 echo "🔍 Checking prerequisites..."
 echo ""
 
+# Check if running in Google Cloud Shell (has all tools pre-installed)
+if [ -z "$CLOUD_SHELL" ]; then
+    IN_CLOUD_SHELL=false
+else
+    IN_CLOUD_SHELL=true
+    echo "✓ Running in Google Cloud Shell"
+fi
+
+# Check for required tools
+MISSING_TOOLS=""
+for cmd in gcloud terraform; do
+    if ! command -v "$cmd" &>/dev/null; then
+        MISSING_TOOLS="$MISSING_TOOLS $cmd"
+    fi
+done
+
+if [ -n "$MISSING_TOOLS" ]; then
+    echo "❌ Error: Required tools not found:$MISSING_TOOLS"
+    echo ""
+    if [ "$IN_CLOUD_SHELL" = false ]; then
+        echo "Recommended: Use Google Cloud Shell (no installation needed)"
+        echo "  1. Open https://console.cloud.google.com"
+        echo "  2. Click the Cloud Shell icon (terminal icon)"
+        echo "  3. Run this script from Cloud Shell"
+    fi
+    exit 1
+fi
+
 # 1. Verify gcloud authentication
 if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q '@'; then
     echo "❌ Error: No active gcloud authentication found."
