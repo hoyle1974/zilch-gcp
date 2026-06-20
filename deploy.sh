@@ -629,8 +629,22 @@ echo ""
 echo -e "${BOLD}Terraform${NC}"
 echo -e "${BLUE}→${NC} Enabling foundational APIs"
 # Cloud Resource Manager API is required by Terraform to manage services and IAM
-if ! gcloud services enable cloudresourcemanager.googleapis.com --project="$PROJECT_ID" --quiet 2>&1 | grep -q "already enabled\|Enabling service"; then
-    echo -e "${YELLOW}⚠${NC} Cloud Resource Manager API may already be enabled or taking time to initialize"
+gcloud services enable cloudresourcemanager.googleapis.com --project="$PROJECT_ID" --quiet 2>&1 >/dev/null
+
+# Wait for Cloud Resource Manager API to propagate (can take a few seconds)
+API_READY=false
+for i in {1..10}; do
+    if gcloud services list --project="$PROJECT_ID" --enabled --filter="name:cloudresourcemanager" --format="value(name)" 2>/dev/null | grep -q cloudresourcemanager; then
+        API_READY=true
+        break
+    fi
+    if [ $i -lt 10 ]; then
+        sleep 1
+    fi
+done
+
+if [ "$API_READY" = false ]; then
+    echo -e "${YELLOW}⚠${NC} Cloud Resource Manager API may still be initializing, continuing anyway..."
 fi
 
 echo -e "${BLUE}→${NC} Initializing"
