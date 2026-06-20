@@ -776,12 +776,20 @@ is_in_terraform_state() {
 import_resource() {
     local resource_type=$1
     local resource_id=$2
+    local output
 
-    terraform -chdir="$(dirname "$0")" import \
+    output=$(terraform -chdir="$(dirname "$0")" import \
         -var="gcp_project_id=${PROJECT_ID}" \
         -var="app_name=${APP_NAME}" \
         -var="gcp_region=${GCP_REGION}" \
-        "${resource_type}" "${resource_id}" 2>&1 | grep -q "Successfully imported"
+        "${resource_type}" "${resource_id}" 2>&1)
+
+    if echo "$output" | grep -q "Successfully imported"; then
+        return 0
+    else
+        echo "$output"
+        return 1
+    fi
 }
 
 # BigQuery Dataset
