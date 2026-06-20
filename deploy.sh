@@ -785,6 +785,11 @@ import_resource() {
         -var="enable_bigquery=${ENABLE_BIGQUERY}" \
         -var="enable_pubsub=${ENABLE_PUBSUB}" \
         -var="enable_scheduler=${ENABLE_SCHEDULER}" \
+        -var="enable_firestore=${ENABLE_FIRESTORE}" \
+        -var="enable_secret_manager=${ENABLE_SECRET_MANAGER}" \
+        -var="enable_cloud_storage=${ENABLE_CLOUD_STORAGE}" \
+        -var="enable_cloud_build=${ENABLE_CLOUD_BUILD}" \
+        -var="enable_monitoring=${ENABLE_MONITORING}" \
         -var="scheduler_schedule=${SCHEDULER_SCHEDULE}" \
         -var="scheduler_timezone=${SCHEDULER_TIMEZONE}" \
         -var="scheduler_endpoint=${SCHEDULER_ENDPOINT}" \
@@ -1017,6 +1022,25 @@ if [ "$ENABLE_SECRET_MANAGER" == "true" ]; then
             fi
         else
             echo -e "${GREEN}✓${NC} Secret Manager secret already in Terraform state"
+        fi
+    fi
+fi
+
+# Cloud Build Trigger
+if [ "$ENABLE_CLOUD_BUILD" == "true" ]; then
+    TRIGGER_NAME="${APP_NAME}-trigger"
+    TRIGGER_ID=$(gcloud builds triggers list --project="${PROJECT_ID}" --filter="name:${TRIGGER_NAME}" --format="value(id)" 2>/dev/null | head -1)
+    if [ -n "$TRIGGER_ID" ]; then
+        if ! is_in_terraform_state "google_cloudbuild_trigger.app_build[0]"; then
+            echo -e "${BLUE}→${NC} Found Cloud Build trigger ${CYAN}${TRIGGER_NAME}${NC} in GCP but not in Terraform state"
+            if import_resource "google_cloudbuild_trigger.app_build[0]" "$TRIGGER_ID"; then
+                echo -e "${GREEN}✓${NC} Imported Cloud Build trigger"
+            else
+                echo -e "${RED}✗${NC} Failed to import Cloud Build trigger"
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}✓${NC} Cloud Build trigger already in Terraform state"
         fi
     fi
 fi
