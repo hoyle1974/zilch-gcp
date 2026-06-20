@@ -224,7 +224,7 @@ resource "google_cloud_run_v2_service" "app" {
       }
       env {
         name  = "ZILCH_MYSQL_PASSWORD"
-        value = var.enable_mysql ? data.google_secret_manager_secret_version.mysql_app_password[0].secret : ""
+        value = var.enable_mysql ? data.google_secret_manager_secret_version.mysql_app_password[0].secret_data : ""
       }
       env {
         name  = "ZILCH_MYSQL_VM_NAME"
