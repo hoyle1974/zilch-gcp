@@ -29,3 +29,13 @@ build/
 
 # Claude Code
 .claude/**/*.lock
+
+# MySQL migration metadata
+db/migrations/.migration_metadata.json
+
+# Local MySQL backups
+db/backups/
+*.sql.bak
+
+# MySQL logs
+mysql-*.log
