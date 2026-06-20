@@ -987,13 +987,27 @@ if [ "$ENABLE_BIGQUERY" == "true" ]; then
     fi
 fi
 
+# Cloud Run Service (always created, not conditional)
+if gcloud run services describe "${APP_NAME}" --region="${GCP_REGION}" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+    if ! is_in_terraform_state "google_cloud_run_v2_service.app"; then
+        echo -e "${BLUE}→${NC} Found Cloud Run service ${CYAN}${APP_NAME}${NC} in GCP but not in Terraform state"
+        if import_resource "google_cloud_run_v2_service.app" "${GCP_REGION}/${APP_NAME}"; then
+            echo -e "${GREEN}✓${NC} Imported Cloud Run service"
+        else
+            echo -e "${RED}✗${NC} Failed to import Cloud Run service"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Cloud Run service already in Terraform state"
+    fi
+fi
+
 # Firestore Database
 if [ "$ENABLE_FIRESTORE" == "true" ]; then
     if ! is_in_terraform_state "google_firestore_database.default[0]"; then
-        FIRESTORE_DB=$(gcloud firestore databases describe --database-id="(default)" --project="${PROJECT_ID}" 2>/dev/null | grep -E "name|uid" | head -1)
-        if [ -n "$FIRESTORE_DB" ]; then
+        if gcloud firestore databases describe --database-id="(default)" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
             echo -e "${BLUE}→${NC} Found Firestore database in GCP but not in Terraform state"
-            if import_resource "google_firestore_database.default[0]" "projects/${PROJECT_ID}/databases/(default)"; then
+            if import_resource "google_firestore_database.default[0]" "(default)"; then
                 echo -e "${GREEN}✓${NC} Imported Firestore database"
             else
                 echo -e "${RED}✗${NC} Failed to import Firestore database"
