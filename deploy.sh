@@ -1425,14 +1425,14 @@ export GOOGLE_CLOUD_QUOTA_PROJECT="${PROJECT_ID}"
 
 # In dry-run mode, show plan instead of applying
 if [ "$DRY_RUN" = true ]; then
-    terraform -chdir="$(dirname "$0")" plan $(build_tf_vars) 2>&1 | tail -20
+    eval "terraform -chdir=\"\$(dirname \"\$0\")\" plan $(build_tf_vars)" 2>&1 | tail -20
     progress_done
     echo ""
     echo -e "${YELLOW}Preview complete.${NC} No changes were made."
     echo "Run without --dry-run to apply these changes."
     exit 0
 else
-    terraform -chdir="$(dirname "$0")" apply -auto-approve $(build_tf_vars) || exit 1
+    eval "terraform -chdir=\"\$(dirname \"\$0\")\" apply -auto-approve $(build_tf_vars)" || exit 1
     progress_done
 fi
 
