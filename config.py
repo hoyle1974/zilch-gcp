@@ -130,7 +130,10 @@ class ZilchConfig(BaseModel):
         parser = configparser.ConfigParser()
         parser.read_string(config_content)
 
-        config_dict = dict(parser.defaults())
+        # Strip surrounding quotes from values
+        config_dict = {
+            k: v.strip('"\'') for k, v in parser.defaults().items()
+        }
 
         try:
             return cls(**config_dict)

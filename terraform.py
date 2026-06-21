@@ -309,7 +309,7 @@ class TerraformExecutor:
             return False
 
 
-class ParallelImporter:
+class StateImporter:
     """Import multiple resources sequentially to avoid Terraform state lock contention."""
 
     def __init__(self, tf_executor: TerraformExecutor):

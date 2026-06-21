@@ -13,7 +13,7 @@ import gcp
 from config import ZilchConfig
 from health_check import check_cloud_run_health
 from output import bold, cyan, error, info, section, success, warning
-from terraform import ParallelImporter, TerraformError, TerraformExecutor
+from terraform import StateImporter, TerraformError, TerraformExecutor
 
 
 @click.group()
@@ -563,7 +563,7 @@ def _reconcile_state(tf: TerraformExecutor, config: ZilchConfig) -> None:
             )
         )
 
-    importer = ParallelImporter(tf)
+    importer = StateImporter(tf)
     importer.import_all(resources, config.to_terraform_vars())
 
 

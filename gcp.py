@@ -440,7 +440,7 @@ def get_billing_info(project_id: str) -> Optional[dict]:
             month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             start_date = month_start.strftime("%Y-%m-%d")
 
-            # Query billing export table for current month costs
+            # Query billing export table for current month costs using parameterized queries
             result = subprocess.run(
                 [
                     "bq",
@@ -448,13 +448,14 @@ def get_billing_info(project_id: str) -> Optional[dict]:
                     f"--project_id={project_id}",
                     "--format=json",
                     "--nouse_legacy_sql",
+                    f"--parameter=start_date:DATE:{start_date}",
                 ],
                 input=f"""
 SELECT
   ROUND(SUM(CAST(cost as float64)), 2) as total_cost
 FROM `{project_id}.billing.gcp_billing_export_v1_*`
-WHERE _TABLE_SUFFIX >= FORMAT_DATE('%Y%m%d', DATE('{start_date}'))
-  AND _TABLE_SUFFIX < FORMAT_DATE('%Y%m%d', DATE_ADD(DATE('{start_date}'), INTERVAL 1 MONTH))
+WHERE _TABLE_SUFFIX >= FORMAT_DATE('%Y%m%d', @start_date)
+  AND _TABLE_SUFFIX < FORMAT_DATE('%Y%m%d', DATE_ADD(@start_date, INTERVAL 1 MONTH))
 LIMIT 1
 """,
                 capture_output=True,
