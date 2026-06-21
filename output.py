@@ -202,27 +202,39 @@ def print_cleanup_summary(results: dict) -> None:
 
         # Permission denied details
         if results.get("permission_denied"):
-            click.echo(f"\n{get_outcome_indicator('permission_denied')} Permission Issues ({len(results['permission_denied'])} resource(s)):")
             for resource_name, error_msg in results["permission_denied"]:
-                click.echo(f"  • {resource_name}")
-                # Extract permission-related info from error
-                if error_msg:
-                    error_lines = error_msg.split('\n')
-                    # Show lines that contain permission info (usually has "Permission", "denied", or "PERMISSION_DENIED")
-                    for line in error_lines[:3]:  # Show first 3 lines of error
-                        if line.strip():
-                            click.echo(f"    {line[:100]}")
+                # Extract permission name from error if available
+                permission = "project owner permissions"
+                if error_msg and "iam.serviceAccounts.delete" in error_msg:
+                    permission = "IAM Admin role to delete service accounts"
+                elif error_msg and "Permission" in error_msg:
+                    # Try to extract the specific permission from error message
+                    for line in error_msg.split('\n'):
+                        if "Permission" in line:
+                            permission = line.strip()
+                            break
+                click.echo(f"{get_outcome_indicator('permission_denied')} {resource_name}: Requires {permission}")
 
         # Error details
         if results.get("error"):
-            click.echo(f"\n{get_outcome_indicator('error')} Errors ({len(results['error'])} resource(s)):")
             for resource_name, error_msg in results["error"]:
-                click.echo(f"  • {resource_name}")
+                # Provide helpful context based on error type
+                explanation = "Unknown error"
                 if error_msg:
-                    error_lines = error_msg.split('\n')
-                    # Show first 2 lines of error message
-                    for line in error_lines[:2]:
-                        if line.strip():
-                            click.echo(f"    {line[:100]}")
+                    if "not empty" in error_msg.lower():
+                        explanation = "Bucket contains data (use gcloud storage rm -r to force delete)"
+                    elif "does not exist" in error_msg.lower():
+                        explanation = "Resource already deleted"
+                    elif "not found" in error_msg.lower():
+                        explanation = "Resource not found"
+                    elif "timeout" in error_msg.lower():
+                        explanation = "Deletion timed out"
+                    else:
+                        # Extract first meaningful line from error
+                        for line in error_msg.split('\n'):
+                            if line.strip() and not line.startswith('-'):
+                                explanation = line.strip()[:80]
+                                break
+                click.echo(f"{get_outcome_indicator('error')} {resource_name}: {explanation}")
 
         click.echo()
