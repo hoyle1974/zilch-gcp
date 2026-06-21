@@ -77,7 +77,7 @@ zilch.py           # Main entry point (commands: deploy, teardown, status)
 - `TerraformExecutor`: Execute Terraform commands
   - `init()`, `apply()`, `destroy()`, `list_resources()`, `get_output()`
   - `import_resource()`: Import pre-existing resources
-- `ParallelImporter`: Import resources in parallel with error tracking
+- `StateImporter`: Import resources sequentially to avoid Terraform state lock contention with retry logic
 
 **`cli.py`**
 - Interactive prompt functions (using Click)
@@ -205,9 +205,9 @@ python3 zilch.py deploy
   - Provides recovery suggestions
   - Shows actual error details
 
-- Parallel imports are cleaner
-  - Uses `ThreadPoolExecutor` instead of background jobs
-  - Better error tracking
+- State reconciliation is robust
+  - Imports resources sequentially to prevent Terraform state lock contention
+  - Automatic retry logic on transient failures
 
 ## Phase 2 Roadmap
 

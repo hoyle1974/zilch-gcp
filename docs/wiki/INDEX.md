@@ -53,4 +53,4 @@ A minimal knowledge base for understanding Zilch. This wiki synthesizes how Zilc
 
 ---
 
-**Last updated:** 2026-06-19
+**Last updated:** 2026-06-20
