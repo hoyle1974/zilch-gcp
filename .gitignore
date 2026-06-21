@@ -68,3 +68,9 @@ htmlcov/
 venv/
 ENV/
 .venv
+
+# Temporary SDD artifacts
+.superpowers/
+
+# Deployment logs
+.zilch-deployment-*.txt
