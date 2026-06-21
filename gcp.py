@@ -3,11 +3,14 @@
 import json
 import os
 import subprocess
+import time
 from typing import Optional
 
 from google.auth import default as google_auth_default
 from google.auth.transport.requests import Request
 from google.cloud import resourcemanager_v3
+from google.cloud import storage
+from google.iam.v1 import iam_policy_pb2
 from google.api_core import exceptions as google_exceptions
 
 from output import error, info, success, warning
@@ -122,31 +125,31 @@ def validate_iam_permissions(project_id: str, current_user: str) -> None:
         GCPError: If user lacks required permissions
     """
     try:
-        result = subprocess.run(
-            [
-                "gcloud",
-                "projects",
-                "get-iam-policy",
-                project_id,
-                "--flatten=bindings[].members",
-                "--filter=bindings.members:user:" + current_user
-                + " AND (bindings.role:roles/editor OR bindings.role:roles/owner)",
-                "--format=value(bindings.role)",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
+        client = resourcemanager_v3.ProjectsClient()
+        request = iam_policy_pb2.GetIamPolicyRequest(resource=f"projects/{project_id}")
+        policy = client.get_iam_policy(request=request)
 
-        if not result.stdout.strip():
+        user_binding = f"user:{current_user}"
+        has_editor = False
+        has_owner = False
+
+        for binding in policy.bindings:
+            if user_binding in binding.members:
+                if "roles/editor" in binding.role:
+                    has_editor = True
+                if "roles/owner" in binding.role:
+                    has_owner = True
+
+        if not (has_editor or has_owner):
             raise GCPError(
                 f"User {current_user} needs Editor or Owner role on {project_id}"
             )
 
         success("IAM permissions OK")
-    except subprocess.CalledProcessError as e:
-        raise GCPError(f"Failed to check IAM permissions: {e.stderr}")
+    except GCPError:
+        raise
+    except Exception as e:
+        raise GCPError(f"Failed to check IAM permissions: {str(e)}")
 
 
 def check_firestore_permissions(project_id: str, current_user: str) -> bool:
@@ -227,55 +230,37 @@ def create_state_bucket(
     """
     info(f"State bucket {bucket_name}")
 
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+
     # Check if bucket already exists
-    try:
-        subprocess.run(
-            ["gcloud", "storage", "buckets", "describe", f"gs://{bucket_name}"],
-            capture_output=True,
-            timeout=10,
-            check=True,
-        )
+    if bucket.exists():
         success("Using existing bucket")
         return
-    except subprocess.CalledProcessError:
-        pass
 
-    # Try to create bucket
+    # Create bucket with uniform bucket-level access
     try:
-        subprocess.run(
-            [
-                "gcloud",
-                "storage",
-                "buckets",
-                "create",
-                f"gs://{bucket_name}",
-                f"--project={project_id}",
-                f"--location={region}",
-                "--uniform-bucket-level-access",
-            ],
-            capture_output=True,
-            timeout=30,
-            check=True,
-        )
+        bucket.location = region
+        bucket.iam_configuration.uniform_bucket_level_access_enabled = True
+        bucket.create()
         success("Created bucket")
-    except subprocess.CalledProcessError as e:
-        raise GCPError(f"Failed to create state bucket: {e.stderr}")
+    except google_exceptions.Conflict:
+        success("Using existing bucket")
+        return
+    except Exception as e:
+        raise GCPError(f"Failed to create state bucket: {str(e)}")
 
-    # Verify bucket is ready
+    # Verify bucket is accessible
     max_retries = 15
     for attempt in range(max_retries):
         try:
-            subprocess.run(
-                ["gcloud", "storage", "ls", f"gs://{bucket_name}/"],
-                capture_output=True,
-                timeout=10,
-                check=True,
-            )
+            list(client.list_blobs(bucket_name, max_results=1))
             success("Bucket is accessible")
             return
-        except subprocess.CalledProcessError:
+        except Exception:
             if attempt < max_retries - 1:
                 info(f"Waiting for bucket ({attempt + 1}/{max_retries})...")
+                time.sleep(1)
             else:
                 raise GCPError("Bucket not accessible after retries")
 

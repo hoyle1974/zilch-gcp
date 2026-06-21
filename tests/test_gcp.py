@@ -116,13 +116,18 @@ def test_setup_firestore_permissions_failure(mocker):
 
 def test_create_state_bucket_already_exists(mocker):
     """Test creating state bucket when it already exists."""
-    mock_run = mocker.patch("subprocess.run")
+    mock_client = MagicMock()
+    mock_bucket = MagicMock()
+    mock_bucket.exists.return_value = True
+    mock_client.bucket.return_value = mock_bucket
 
-    # First call: bucket describe succeeds
-    mock_run.return_value = MagicMock(returncode=0)
+    mocker.patch("gcp.storage.Client", return_value=mock_client)
 
     # Should not raise
     gcp.create_state_bucket("project", "bucket-name", "us-central1")
+
+    # Verify the bucket's exists() was called
+    mock_bucket.exists.assert_called_once()
 
 
 def test_check_terraform_lock_exists(mocker):
