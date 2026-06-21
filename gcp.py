@@ -278,14 +278,14 @@ def read_terraform_lock_metadata(state_bucket: str, app_name: str) -> Optional[d
 def remove_terraform_lock(
     state_bucket: str, app_name: str, tf_executor: Optional[object] = None
 ) -> bool:
-    """Remove stale Terraform lock file using native force-unlock.
+    """Remove stale Terraform lock file using direct GCS deletion.
 
     Reads lock metadata first to determine if lock is stale.
 
     Args:
         state_bucket: Name of Terraform state bucket
         app_name: Application name
-        tf_executor: TerraformExecutor instance for native force-unlock (optional)
+        tf_executor: TerraformExecutor instance (unused, kept for compatibility)
 
     Returns:
         True if successful, False otherwise
@@ -303,18 +303,16 @@ def remove_terraform_lock(
     info(f"  Held by: {lock_metadata['who']}")
     info(f"  Created: {lock_metadata['created']}")
 
-    # If we have a tf_executor, use native force-unlock
-    if tf_executor and hasattr(tf_executor, 'force_unlock'):
-        return tf_executor.force_unlock(lock_metadata['id'])
-
-    # Fallback: raw bucket deletion (should be rare)
+    # Use direct GCS deletion to avoid terraform force-unlock deadlock
+    # (force-unlock tries to acquire a lock itself, causing a timeout)
     try:
         client = storage.Client()
         bucket = client.bucket(state_bucket)
         blob = bucket.blob(f"terraform/state/{app_name}/default.tflock")
         blob.delete()
         return True
-    except Exception:
+    except Exception as e:
+        warning(f"Failed to delete lock from GCS: {str(e)}")
         return False
 
 
