@@ -345,6 +345,42 @@ class TerraformExecutor:
         except Exception:
             return False
 
+    def force_unlock(self, lock_id: str) -> bool:
+        """Force-unlock Terraform state using native terraform force-unlock.
+
+        Args:
+            lock_id: Lock ID from state lock metadata
+
+        Returns:
+            True if successful, False otherwise
+        """
+        cmd = [
+            "terraform",
+            "-chdir=" + str(self.working_dir),
+            "force-unlock",
+            lock_id,
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+                cwd=str(self.working_dir),
+            )
+
+            if result.returncode == 0:
+                success(f"Terraform state unlocked: {lock_id}")
+                return True
+            else:
+                warning(f"Failed to force-unlock: {result.stderr}")
+                return False
+        except Exception as e:
+            warning(f"Force-unlock exception: {str(e)}")
+            return False
+
 
 class StateImporter:
     """Import multiple resources sequentially to avoid Terraform state lock contention."""

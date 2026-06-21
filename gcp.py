@@ -339,18 +339,74 @@ def check_terraform_lock_exists(state_bucket: str, app_name: str) -> bool:
         return False
 
 
-def remove_terraform_lock(state_bucket: str, app_name: str) -> bool:
-    """Remove stale Terraform lock file.
+def read_terraform_lock_metadata(state_bucket: str, app_name: str) -> Optional[dict]:
+    """Read and parse Terraform state lock metadata.
 
     Args:
         state_bucket: Name of Terraform state bucket
         app_name: Application name
 
     Returns:
-        True if successful, False otherwise
+        Lock metadata dict with ID, Operation, Who, Created, or None if lock not found
     """
     lock_path = f"gs://{state_bucket}/terraform/state/{app_name}/default.tflock"
 
+    try:
+        client = storage.Client()
+        bucket = client.bucket(state_bucket)
+        blob = bucket.blob(f"terraform/state/{app_name}/default.tflock")
+
+        if not blob.exists():
+            return None
+
+        lock_data = blob.download_as_text()
+        lock_json = json.loads(lock_data)
+
+        return {
+            "id": lock_json.get("ID", "unknown"),
+            "operation": lock_json.get("Operation", "unknown"),
+            "who": lock_json.get("Who", "unknown"),
+            "created": lock_json.get("Created", "unknown"),
+        }
+    except Exception as e:
+        warning(f"Failed to read lock metadata: {str(e)}")
+        return None
+
+
+def remove_terraform_lock(
+    state_bucket: str, app_name: str, tf_executor: Optional[object] = None
+) -> bool:
+    """Remove stale Terraform lock file using native force-unlock.
+
+    Reads lock metadata first to determine if lock is stale.
+
+    Args:
+        state_bucket: Name of Terraform state bucket
+        app_name: Application name
+        tf_executor: TerraformExecutor instance for native force-unlock (optional)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    lock_metadata = read_terraform_lock_metadata(state_bucket, app_name)
+
+    if not lock_metadata:
+        info("No Terraform lock found")
+        return True
+
+    # Display lock metadata to user
+    info(f"Lock Details:")
+    info(f"  ID: {lock_metadata['id']}")
+    info(f"  Operation: {lock_metadata['operation']}")
+    info(f"  Held by: {lock_metadata['who']}")
+    info(f"  Created: {lock_metadata['created']}")
+
+    # If we have a tf_executor, use native force-unlock
+    if tf_executor and hasattr(tf_executor, 'force_unlock'):
+        return tf_executor.force_unlock(lock_metadata['id'])
+
+    # Fallback: raw bucket deletion (should be rare)
+    lock_path = f"gs://{state_bucket}/terraform/state/{app_name}/default.tflock"
     try:
         result = subprocess.run(
             ["gcloud", "storage", "rm", lock_path],
