@@ -2,7 +2,6 @@
 
 import os
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -311,7 +310,7 @@ class TerraformExecutor:
 
 
 class ParallelImporter:
-    """Import multiple resources in parallel."""
+    """Import multiple resources sequentially to avoid Terraform state lock contention."""
 
     def __init__(self, tf_executor: TerraformExecutor):
         """Initialize importer.
@@ -324,7 +323,11 @@ class ParallelImporter:
     def import_all(
         self, resources: List[tuple], vars_dict: Dict[str, str]
     ) -> Dict[str, bool]:
-        """Import multiple resources in parallel.
+        """Import multiple resources sequentially with retry on lock failures.
+
+        Sequential execution prevents state lock contention. Terraform uses
+        exclusive write locks on remote state — concurrent imports cause
+        "Error acquiring the state lock" failures.
 
         Args:
             resources: List of (resource_type, resource_id, display_name) tuples
@@ -336,61 +339,59 @@ class ParallelImporter:
         results = {}
         failed = []
 
-        info("Checking resources in parallel...")
+        info("Importing resources...")
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {
-                executor.submit(
-                    self._import_with_check,
-                    resource_type,
-                    resource_id,
-                    display_name,
-                    vars_dict,
-                ): display_name
-                for resource_type, resource_id, display_name in resources
-            }
-
-            for future in as_completed(futures):
-                display_name = futures[future]
-                try:
-                    success_flag = future.result()
-                    results[display_name] = success_flag
-                    if success_flag:
-                        success(f"Imported {display_name}")
-                    else:
-                        failed.append(display_name)
-                        warning(f"Import failed: {display_name}")
-                except Exception as e:
-                    failed.append(display_name)
-                    warning(f"Import error: {display_name}: {e}")
+        for resource_type, resource_id, display_name in resources:
+            success_flag = self._import_with_retry(
+                resource_type,
+                resource_id,
+                display_name,
+                vars_dict,
+            )
+            results[display_name] = success_flag
+            if success_flag:
+                success(f"Imported {display_name}")
+            else:
+                failed.append(display_name)
+                warning(f"Import failed: {display_name}")
 
         if failed:
             warning(f"Some imports had issues: {', '.join(failed)}, continuing...")
 
         return results
 
-    def _import_with_check(
+    def _import_with_retry(
         self,
         resource_type: str,
         resource_id: str,
         display_name: str,
         vars_dict: Dict[str, str],
+        max_retries: int = 2,
     ) -> bool:
-        """Check if resource exists in state, then import if needed.
+        """Import resource with retry on failure.
 
         Args:
             resource_type: Terraform resource type
             resource_id: GCP resource ID
             display_name: Display name for logging
             vars_dict: Dictionary of Terraform variables
+            max_retries: Number of retry attempts
 
         Returns:
             True if resource is now in state
         """
-        # Check if already in state
-        resources = self.tf.list_resources()
-        if any(resource_type in r for r in resources):
-            return True
+        for attempt in range(max_retries):
+            # Check if already in state
+            resources = self.tf.list_resources()
+            if any(resource_type in r for r in resources):
+                return True
 
-        # Try to import
-        return self.tf.import_resource(resource_type, resource_id, vars_dict)
+            # Try to import
+            if self.tf.import_resource(resource_type, resource_id, vars_dict):
+                return True
+
+            # Retry on failure (except on last attempt)
+            if attempt < max_retries - 1:
+                warning(f"Import failed for {display_name}, retrying...")
+
+        return False
