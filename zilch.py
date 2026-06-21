@@ -147,11 +147,11 @@ def deploy(auto: bool, dry_run: bool, verbose: bool) -> None:
         config.save_to_file(".zilch.config")
         success("Config saved")
 
-        # Setup GCP
-        _setup_gcp(config)
+        # Setup GCP and get TerraformExecutor
+        tf = _setup_gcp(config)
 
         # Terraform
-        _run_terraform(config, dry_run=dry_run)
+        _run_terraform(config, tf=tf, dry_run=dry_run)
 
         # Health checks and summary (skip in dry-run mode)
         if not dry_run:
@@ -422,8 +422,12 @@ def _setup_monitoring(config: ZilchConfig, auto: bool) -> None:
         warning(f"Could not set quota project: {e}")
 
 
-def _setup_gcp(config: ZilchConfig) -> None:
-    """Setup GCP resources."""
+def _setup_gcp(config: ZilchConfig) -> TerraformExecutor:
+    """Setup GCP resources.
+
+    Returns:
+        TerraformExecutor instance for use in later stages
+    """
     section("GCP Setup")
 
     gcp.set_project_context(config.gcp_project_id)
@@ -437,11 +441,15 @@ def _setup_gcp(config: ZilchConfig) -> None:
         error(str(e))
         sys.exit(1)
 
+    # Create TerraformExecutor for lock removal
+    script_dir = Path(__file__).parent.absolute()
+    tf = TerraformExecutor(str(script_dir))
+
     # Check for stale Terraform lock
     if gcp.check_terraform_lock_exists(state_bucket, config.app_name):
         warning("Found existing Terraform state lock")
         if click.confirm("Remove stale lock and continue?", default=True):
-            if not gcp.remove_terraform_lock(state_bucket, config.app_name):
+            if not gcp.remove_terraform_lock(state_bucket, config.app_name, tf):
                 error("Failed to remove lock")
                 sys.exit(1)
             success("Lock removed")
@@ -449,12 +457,15 @@ def _setup_gcp(config: ZilchConfig) -> None:
             error("Cannot proceed with lock present")
             sys.exit(1)
 
+    return tf
 
-def _run_terraform(config: ZilchConfig, dry_run: bool = False) -> None:
+
+def _run_terraform(config: ZilchConfig, tf: Optional[TerraformExecutor] = None, dry_run: bool = False) -> None:
     """Run Terraform deployment.
 
     Args:
         config: Zilch configuration
+        tf: Optional TerraformExecutor instance (creates new one if not provided)
         dry_run: If True, run terraform plan instead of apply
     """
     section("Terraform")
@@ -466,7 +477,8 @@ def _run_terraform(config: ZilchConfig, dry_run: bool = False) -> None:
     script_dir = Path(__file__).parent.absolute()
 
     try:
-        tf = TerraformExecutor(str(script_dir))
+        if tf is None:
+            tf = TerraformExecutor(str(script_dir))
         tf.init(state_bucket, state_prefix)
 
         # State reconciliation (import existing resources)
