@@ -122,6 +122,7 @@ class TerraformExecutor:
             "-chdir=" + str(self.working_dir),
             "plan",
             "-json",  # Enforce JSON output
+            "-lock=false",  # Disable state locking (GCS backend issue)
         ] + var_args
 
         # Set quota project for billing API
@@ -187,6 +188,7 @@ class TerraformExecutor:
             "apply",
             "-auto-approve",
             "-json",  # Enforce JSON output
+            "-lock=false",  # Disable state locking (GCS backend issue)
         ] + var_args
 
         # Set quota project for billing API
@@ -246,6 +248,7 @@ class TerraformExecutor:
             "terraform",
             "-chdir=" + str(self.working_dir),
             "destroy",
+            "-lock=false",  # Disable state locking (GCS backend issue)
         ]
 
         if force:
