@@ -182,3 +182,39 @@ def test_config_extra_fields_ignored():
 
     assert config.gcp_project_id == "test-project"
     assert not hasattr(config, "unknown_field")
+
+
+def test_config_health_check_defaults():
+    config = ZilchConfig(
+        gcp_project_id="test-project",
+        app_name="test-app"
+    )
+    assert config.expected_health_status == 200
+    assert config.health_check_endpoint == "/health-check"
+
+
+def test_config_health_check_custom_status():
+    config = ZilchConfig(
+        gcp_project_id="test-project",
+        app_name="test-app",
+        expected_health_status=202
+    )
+    assert config.expected_health_status == 202
+
+
+def test_config_health_check_custom_endpoint():
+    config = ZilchConfig(
+        gcp_project_id="test-project",
+        app_name="test-app",
+        health_check_endpoint="/status"
+    )
+    assert config.health_check_endpoint == "/status"
+
+
+def test_config_health_check_invalid_status():
+    with pytest.raises(ValidationError, match="HTTP success code"):
+        ZilchConfig(
+            gcp_project_id="test-project",
+            app_name="test-app",
+            expected_health_status=500
+        )

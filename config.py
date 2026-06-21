@@ -55,6 +55,10 @@ class ZilchConfig(BaseModel):
     allow_unauthenticated_access: bool = True
     gcp_billing_account_id: Optional[str] = None
 
+    # Health check configuration
+    expected_health_status: int = 200
+    health_check_endpoint: str = "/health-check"
+
     # GitHub integration (Cloud Build)
     github_owner: Optional[str] = None
     github_repo: Optional[str] = None
@@ -101,6 +105,14 @@ class ZilchConfig(BaseModel):
         if float_val <= 0:
             raise ValueError("Budget must be positive")
 
+        return v
+
+    @field_validator("expected_health_status")
+    @classmethod
+    def validate_http_status(cls, v: int) -> int:
+        """Validate HTTP status code is 2xx or 3xx."""
+        if not 200 <= v < 400:
+            raise ValueError("expected_health_status must be a valid HTTP success code (200-399)")
         return v
 
     @classmethod
