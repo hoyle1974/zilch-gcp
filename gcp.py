@@ -336,3 +336,135 @@ def get_billing_info(project_id: str) -> Optional[dict]:
             return None
     except Exception:
         return None
+
+
+def set_project_context(project_id: str) -> None:
+    """Set GCP project context for gcloud operations.
+
+    Args:
+        project_id: GCP project ID
+    """
+    try:
+        result = subprocess.run(
+            ["gcloud", "config", "set", "project", project_id],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            success(f"Project context set to {project_id}")
+        else:
+            warning(f"Failed to set project context: {result.stderr.decode('utf-8', errors='replace').strip()}")
+    except Exception as e:
+        warning(f"Could not set project context: {e}")
+
+
+def enable_required_apis(project_id: str, enable_mysql: bool) -> None:
+    """Enable required GCP APIs.
+
+    Args:
+        project_id: GCP project ID
+        enable_mysql: Whether to enable Cloud SQL Admin API
+    """
+    apis_to_enable = [
+        "cloudbuild.googleapis.com",
+        "cloudrun.googleapis.com",
+        "artifactregistry.googleapis.com",
+        "compute.googleapis.com",
+        "iam.googleapis.com",
+        "iamcredentials.googleapis.com",
+        "serviceusage.googleapis.com",
+        "storage-api.googleapis.com",
+    ]
+
+    if enable_mysql:
+        apis_to_enable.append("sqladmin.googleapis.com")
+
+    info("Enabling required APIs")
+
+    for api in apis_to_enable:
+        try:
+            result = subprocess.run(
+                ["gcloud", "services", "enable", api, f"--project={project_id}"],
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            if result.returncode == 0:
+                success(f"API {api} enabled")
+            else:
+                stderr = result.stderr.decode("utf-8", errors="replace").strip()
+                if "already enabled" in stderr.lower():
+                    success(f"API {api} already enabled")
+                else:
+                    warning(f"Failed to enable {api}: {stderr[:100]}")
+        except subprocess.TimeoutExpired:
+            warning(f"Timeout enabling {api}")
+        except Exception as e:
+            warning(f"Could not enable {api}: {e}")
+
+
+def check_firestore_permissions(project_id: str, current_user: str) -> bool:
+    """Check if user has Firestore Admin permissions.
+
+    Args:
+        project_id: GCP project ID
+        current_user: Authenticated user email
+
+    Returns:
+        True if user has Firestore Admin role, False otherwise
+    """
+    try:
+        client = resourcemanager_v3.ProjectsClient()
+        request = iam_policy_pb2.GetIamPolicyRequest(resource=f"projects/{project_id}")
+        policy = client.get_iam_policy(request=request)
+
+        user_binding = f"user:{current_user}"
+
+        for binding in policy.bindings:
+            if user_binding in binding.members:
+                if "roles/datastore.admin" in binding.role or "roles/editor" in binding.role or "roles/owner" in binding.role:
+                    return True
+
+        return False
+    except Exception as e:
+        warning(f"Could not check Firestore permissions: {e}")
+        return False
+
+
+def setup_firestore_permissions(project_id: str, current_user: str) -> bool:
+    """Grant Firestore Admin role to user.
+
+    Args:
+        project_id: GCP project ID
+        current_user: Authenticated user email
+
+    Returns:
+        True if role was granted, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            [
+                "gcloud",
+                "projects",
+                "add-iam-policy-binding",
+                project_id,
+                f"--member=user:{current_user}",
+                "--role=roles/datastore.admin",
+                "--quiet",
+            ],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+
+        if result.returncode == 0:
+            success(f"Granted Firestore Admin role to {current_user}")
+            return True
+        else:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            warning(f"Failed to grant Firestore Admin role: {stderr[:100]}")
+            return False
+    except Exception as e:
+        warning(f"Could not grant Firestore Admin role: {e}")
+        return False

@@ -577,7 +577,12 @@ def _run_health_checks(config: ZilchConfig) -> None:
         url = tf.get_output("cloud_run_url")
 
         if url:
-            check_cloud_run_health(url)
+            check_cloud_run_health(
+                url,
+                expected_status=config.expected_health_status,
+                endpoint=config.health_check_endpoint,
+                allow_unauthenticated=config.allow_unauthenticated_access
+            )
         else:
             warning("Could not retrieve Cloud Run URL")
     except Exception as e:
