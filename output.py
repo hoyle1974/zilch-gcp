@@ -152,3 +152,46 @@ def get_outcome_indicator(outcome: str) -> str:
         "error": "🚫",
     }
     return indicators.get(outcome, "?")
+
+
+def print_cleanup_summary(results: dict) -> None:
+    """Print cleanup results summary grouped by outcome.
+
+    Args:
+        results: Dict with keys: "deleted", "already_gone", "permission_denied", "timeout", "error"
+                 Each value is list of (resource_name, reason) tuples
+    """
+    # Count by outcome (skip outcomes with no results)
+    counts = {k: len(v) for k, v in results.items() if v}
+
+    if not counts:
+        return  # No failures, skip summary
+
+    section("Teardown Summary")
+
+    # Show deleted resources
+    if "deleted" in counts and counts["deleted"] > 0:
+        indicator = get_outcome_indicator("deleted")
+        click.echo(f"{indicator} Deleted: {counts['deleted']} resources")
+
+    # Show already gone
+    if "already_gone" in counts and counts["already_gone"] > 0:
+        indicator = get_outcome_indicator("already_gone")
+        click.echo(f"{indicator} Already gone: {counts['already_gone']} resources (not found — Terraform handled these)")
+
+    # Show permission denied
+    if "permission_denied" in counts and counts["permission_denied"] > 0:
+        indicator = get_outcome_indicator("permission_denied")
+        click.echo(f"{indicator} Permission denied: {counts['permission_denied']} resources (may need project owner)")
+
+    # Show timeouts
+    if "timeout" in counts and counts["timeout"] > 0:
+        indicator = get_outcome_indicator("timeout")
+        click.echo(f"{indicator} Timeouts: {counts['timeout']} resource(s)")
+
+    # Show errors
+    if "error" in counts and counts["error"] > 0:
+        indicator = get_outcome_indicator("error")
+        click.echo(f"{indicator} Errors: {counts['error']} resource(s)")
+
+    click.echo()
