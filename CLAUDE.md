@@ -44,16 +44,25 @@ Every markdown file in `docs/wiki/` **must** include YAML frontmatter in this fo
 
 ```yaml
 ---
+title: One-line description of the page
 tags: [tag1, tag2, tag3]
 last_updated: 2026-06-20
+source_count: 2
+sources:
+  - SOURCE_DOCUMENT_ONE.md
+  - SOURCE_DOCUMENT_TWO.md
 ---
 ```
 
 **Rules:**
 - Frontmatter is enclosed by `---` delimiters (opening and closing)
+- `title` is a string giving a one-line description of the page's content
 - `tags` is an array of lowercase, hyphenated strings (e.g., `deployment`, `gcp-services`, `python`)
 - `last_updated` is an ISO 8601 date string (YYYY-MM-DD)
+- `source_count` is an integer giving the number of source documents synthesized into the page
+- `sources` is an array of strings listing the source files synthesized into the page
 - Frontmatter is required for all .md files
+- `title`, `source_count`, and `sources` are required when a page is produced or recompiled from source documents (e.g., via the INGEST workflow); they may be omitted on pages not built from synthesized sources
 - Exception: Internal temporary or auto-generated files may omit frontmatter if documented in this schema
 
 **Tag Guidelines:**

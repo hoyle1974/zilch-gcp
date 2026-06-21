@@ -60,7 +60,7 @@ Your checklist for a successful first deployment of Zilch infrastructure using t
 - [ ] **Wait for Terraform**
   - Takes 2-3 minutes
   - Watch for ✅ checkmarks
-  - If errors occur, note them and check [Troubleshooting](troubleshooting/)
+  - If errors occur, note them and check [Troubleshooting](troubleshooting/common.md)
 
   Want to see what would happen first, without changing anything?
   ```bash

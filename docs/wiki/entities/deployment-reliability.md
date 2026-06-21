@@ -226,10 +226,10 @@ Per `IMPLEMENTATION_SUMMARY.md`, the current Python implementation is Phase 1 of
 
 ## See Also
 
-- [[deployment-workflow.md]] — Full step-by-step deploy/teardown flow
-- [[configuration.md]] — `ZilchConfig` validation and `.zilch.config` format
-- [[terraform.md]] — Understanding Terraform state and operations
-- [[remote-state.md]] — How Terraform stores state in Cloud Storage
+- [Deployment Workflow](deployment-workflow.md) — Full step-by-step deploy/teardown flow
+- [Configuration Guide](configuration.md) — `ZilchConfig` validation and `.zilch.config` format
+- [Terraform](terraform.md) — Understanding Terraform state and operations
+- [Remote State](remote-state.md) — How Terraform stores state in Cloud Storage
 
 ---
 
