@@ -15,6 +15,30 @@ class TerraformError(Exception):
     pass
 
 
+def _parse_terraform_json_output(output: str) -> list:
+    """Parse Terraform JSON output (newline-delimited JSON).
+
+    Args:
+        output: Raw Terraform JSON output
+
+    Returns:
+        List of parsed JSON objects
+
+    Raises:
+        TerraformError: If JSON parsing fails
+    """
+    objects = []
+    for line in output.strip().split('\n'):
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            objects.append(obj)
+        except json.JSONDecodeError as e:
+            raise TerraformError(f"Failed to parse Terraform JSON line: {line}\nError: {str(e)}")
+    return objects
+
+
 class TerraformExecutor:
     """Execute Terraform commands."""
 
@@ -114,15 +138,12 @@ class TerraformExecutor:
                 text=True,
             )
 
-            # Parse JSON output
-            try:
-                plan_output = json.loads(result.stdout)
-            except json.JSONDecodeError:
-                raise TerraformError(f"Failed to parse Terraform plan JSON: {result.stdout}")
-
-            # Check for errors in JSON diagnostics
+            # Check for errors first
             if result.returncode != 0:
                 raise TerraformError(f"Terraform plan failed: {result.stderr}")
+
+            # Parse newline-delimited JSON output
+            plan_output = _parse_terraform_json_output(result.stdout)
 
             success("Plan completed (no changes applied)")
             return plan_output
@@ -175,15 +196,12 @@ class TerraformExecutor:
                 text=True,
             )
 
-            # Parse JSON output
-            try:
-                apply_output = json.loads(result.stdout)
-            except json.JSONDecodeError:
-                raise TerraformError(f"Failed to parse Terraform apply JSON: {result.stdout}")
-
-            # Check for errors in JSON diagnostics
+            # Check for errors first
             if result.returncode != 0:
                 raise TerraformError(f"Terraform apply failed: {result.stderr}")
+
+            # Parse newline-delimited JSON output
+            apply_output = _parse_terraform_json_output(result.stdout)
 
             success("Infrastructure deployed")
             return apply_output
