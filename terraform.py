@@ -1,5 +1,6 @@
 """Terraform orchestration."""
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -68,11 +69,14 @@ class TerraformExecutor:
                         f"Terraform init failed"
                     )
 
-    def plan(self, vars_dict: Dict[str, str]) -> None:
-        """Plan Terraform changes (dry-run).
+    def plan(self, vars_dict: Dict[str, str]) -> Dict:
+        """Plan Terraform changes (dry-run) with JSON output.
 
         Args:
             vars_dict: Dictionary of Terraform variables
+
+        Returns:
+            Parsed JSON plan output as dict
 
         Raises:
             TerraformError: If plan fails
@@ -91,6 +95,7 @@ class TerraformExecutor:
             "terraform",
             "-chdir=" + str(self.working_dir),
             "plan",
+            "-json",  # Enforce JSON output
         ] + var_args
 
         # Set quota project for billing API
@@ -102,19 +107,36 @@ class TerraformExecutor:
             result = subprocess.run(
                 cmd,
                 timeout=600,  # 10 minutes
-                check=True,
+                check=False,  # JSON output includes diagnostics
                 cwd=str(self.working_dir),
                 env=env,
+                capture_output=True,
+                text=True,
             )
-            success("Plan completed (no changes applied)")
-        except subprocess.CalledProcessError as e:
-            raise TerraformError(f"Terraform plan failed")
 
-    def apply(self, vars_dict: Dict[str, str]) -> None:
-        """Apply Terraform configuration.
+            # Parse JSON output
+            try:
+                plan_output = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                raise TerraformError(f"Failed to parse Terraform plan JSON: {result.stdout}")
+
+            # Check for errors in JSON diagnostics
+            if result.returncode != 0:
+                raise TerraformError(f"Terraform plan failed: {result.stderr}")
+
+            success("Plan completed (no changes applied)")
+            return plan_output
+        except subprocess.TimeoutExpired:
+            raise TerraformError("Terraform plan timed out")
+
+    def apply(self, vars_dict: Dict[str, str]) -> Dict:
+        """Apply Terraform configuration with JSON output.
 
         Args:
             vars_dict: Dictionary of Terraform variables
+
+        Returns:
+            Parsed JSON apply output as dict
 
         Raises:
             TerraformError: If apply fails
@@ -134,6 +156,7 @@ class TerraformExecutor:
             "-chdir=" + str(self.working_dir),
             "apply",
             "-auto-approve",
+            "-json",  # Enforce JSON output
         ] + var_args
 
         # Set quota project for billing API
@@ -145,13 +168,27 @@ class TerraformExecutor:
             result = subprocess.run(
                 cmd,
                 timeout=600,  # 10 minutes
-                check=True,
+                check=False,  # JSON output includes diagnostics
                 cwd=str(self.working_dir),
                 env=env,
+                capture_output=True,
+                text=True,
             )
+
+            # Parse JSON output
+            try:
+                apply_output = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                raise TerraformError(f"Failed to parse Terraform apply JSON: {result.stdout}")
+
+            # Check for errors in JSON diagnostics
+            if result.returncode != 0:
+                raise TerraformError(f"Terraform apply failed: {result.stderr}")
+
             success("Infrastructure deployed")
-        except subprocess.CalledProcessError as e:
-            raise TerraformError(f"Terraform apply failed")
+            return apply_output
+        except subprocess.TimeoutExpired:
+            raise TerraformError("Terraform apply timed out")
 
     def destroy(self, vars_dict: Dict[str, str], force: bool = False) -> bool:
         """Destroy Terraform infrastructure.
