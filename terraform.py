@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import click
+
 from output import error, info, success, warning
 
 
@@ -140,7 +142,14 @@ class TerraformExecutor:
 
             # Check for errors first
             if result.returncode != 0:
-                raise TerraformError(f"Terraform plan failed: {result.stderr}")
+                # Print full terraform output to show actual error
+                if result.stdout:
+                    info("Terraform output:")
+                    click.echo(result.stdout)
+                if result.stderr:
+                    info("Terraform errors:")
+                    click.echo(result.stderr)
+                raise TerraformError(f"Terraform plan failed with exit code {result.returncode}")
 
             # Parse newline-delimited JSON output
             plan_output = _parse_terraform_json_output(result.stdout)
@@ -198,7 +207,14 @@ class TerraformExecutor:
 
             # Check for errors first
             if result.returncode != 0:
-                raise TerraformError(f"Terraform apply failed: {result.stderr}")
+                # Print full terraform output to show actual error
+                if result.stdout:
+                    info("Terraform output:")
+                    click.echo(result.stdout)
+                if result.stderr:
+                    info("Terraform errors:")
+                    click.echo(result.stderr)
+                raise TerraformError(f"Terraform apply failed with exit code {result.returncode}")
 
             # Parse newline-delimited JSON output
             apply_output = _parse_terraform_json_output(result.stdout)
