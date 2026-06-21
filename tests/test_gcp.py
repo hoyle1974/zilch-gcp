@@ -32,34 +32,28 @@ def test_check_required_tools_missing(mocker):
 
 def test_validate_gcloud_auth_success(mocker):
     """Test validating gcloud authentication."""
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value = MagicMock(
-        stdout="user@example.com\n",
-        returncode=0,
-    )
+    mock_creds = MagicMock()
+    mock_creds.service_account_email = "user@example.com"
+    mocker.patch("gcp.google_auth_default", return_value=(mock_creds, "test-project"))
 
-    result = gcp.validate_gcloud_auth()
-    assert result == "user@example.com"
+    email, creds = gcp.validate_gcloud_auth()
+    assert email == "user@example.com"
+    assert creds == mock_creds
 
 
 def test_validate_gcloud_auth_failure(mocker):
     """Test gcloud authentication failure."""
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value = MagicMock(
-        stdout="",
-        returncode=1,
-    )
+    mocker.patch("gcp.google_auth_default", side_effect=Exception("No credentials"))
 
-    with pytest.raises(gcp.GCPError, match="No active gcloud authentication"):
+    with pytest.raises(gcp.GCPError, match="Failed to authenticate"):
         gcp.validate_gcloud_auth()
 
 
 def test_validate_project_success(mocker):
     """Test validating GCP project."""
-    mocker.patch(
-        "subprocess.run",
-        return_value=MagicMock(returncode=0),
-    )
+    mock_client = MagicMock()
+    mocker.patch("gcp.resourcemanager_v3.ProjectsClient", return_value=mock_client)
+    mock_client.get_project.return_value = MagicMock(name="projects/test-project")
 
     # Should not raise
     gcp.validate_project("test-project")
@@ -67,8 +61,10 @@ def test_validate_project_success(mocker):
 
 def test_validate_project_not_found(mocker):
     """Test validating nonexistent GCP project."""
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.side_effect = Exception("not found")
+    from google.api_core.exceptions import NotFound
+    mock_client = MagicMock()
+    mocker.patch("gcp.resourcemanager_v3.ProjectsClient", return_value=mock_client)
+    mock_client.get_project.side_effect = NotFound("not found")
 
     with pytest.raises(gcp.GCPError):
         gcp.validate_project("nonexistent-project")

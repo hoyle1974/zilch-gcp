@@ -1,8 +1,14 @@
 """GCP validation and operations."""
 
+import json
 import os
 import subprocess
 from typing import Optional
+
+from google.auth import default as google_auth_default
+from google.auth.transport.requests import Request
+from google.cloud import resourcemanager_v3
+from google.api_core import exceptions as google_exceptions
 
 from output import error, info, success, warning
 
@@ -52,41 +58,37 @@ def check_required_tools() -> None:
     success("Required tools available")
 
 
-def validate_gcloud_auth() -> str:
-    """Validate gcloud authentication.
+def validate_gcloud_auth() -> tuple[str, object]:
+    """Validate Google Cloud authentication via default credentials.
 
     Returns:
-        Currently authenticated account email
+        Tuple of (authenticated account email, credentials object)
 
     Raises:
         GCPError: If not authenticated
     """
     try:
-        result = subprocess.run(
-            [
-                "gcloud",
-                "auth",
-                "list",
-                "--filter=status:ACTIVE",
-                "--format=value(account)",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
+        credentials, project_id = google_auth_default()
 
-        accounts = result.stdout.strip().split("\n")
-        current_user = accounts[0] if accounts and accounts[0] else None
+        # Refresh credentials to ensure they're valid
+        credentials.refresh(Request())
+
+        # Get the service account email from credentials
+        if hasattr(credentials, 'service_account_email'):
+            current_user = credentials.service_account_email
+        elif hasattr(credentials, '_service_account_email'):
+            current_user = credentials._service_account_email
+        else:
+            # For user credentials, extract from token
+            current_user = getattr(credentials, 'quota_project_id', 'unknown@google.com')
 
         if not current_user or "@" not in current_user:
-            raise GCPError("No active gcloud authentication found")
+            raise GCPError("Could not determine authenticated account email")
 
         success(f"Authenticated as {current_user}")
-        return current_user
-
-    except subprocess.CalledProcessError as e:
-        raise GCPError(f"Failed to check authentication: {e.stderr}")
+        return current_user, credentials
+    except Exception as e:
+        raise GCPError(f"Failed to authenticate: {str(e)}")
 
 
 def validate_project(project_id: str) -> None:
@@ -99,18 +101,14 @@ def validate_project(project_id: str) -> None:
         GCPError: If project doesn't exist or user has no access
     """
     try:
-        subprocess.run(
-            ["gcloud", "projects", "describe", project_id],
-            capture_output=True,
-            timeout=10,
-            check=True,
-        )
+        client = resourcemanager_v3.ProjectsClient()
+        request = resourcemanager_v3.GetProjectRequest(name=f"projects/{project_id}")
+        project = client.get_project(request=request)
         success(f"Project {project_id}")
-    except (subprocess.CalledProcessError, Exception):
-        raise GCPError(
-            f"Project {project_id} not found or no access. "
-            "Verify the project ID and your credentials."
-        )
+    except google_exceptions.NotFound:
+        raise GCPError(f"Project {project_id} not found or no access")
+    except Exception as e:
+        raise GCPError(f"Failed to validate project: {str(e)}")
 
 
 def validate_iam_permissions(project_id: str, current_user: str) -> None:

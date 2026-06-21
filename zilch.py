@@ -49,7 +49,7 @@ def deploy(auto: bool, dry_run: bool, verbose: bool) -> None:
         gcp.check_required_tools()
 
         # Check auth
-        current_user = gcp.validate_gcloud_auth()
+        current_user, credentials = gcp.validate_gcloud_auth()
 
         # Load or create config (in current app directory)
         if Path(".zilch.config").exists():
@@ -189,7 +189,7 @@ def teardown(force: bool) -> None:
         # Prerequisites check
         section("Prerequisites")
         gcp.check_required_tools()
-        current_user = gcp.validate_gcloud_auth()
+        current_user, credentials = gcp.validate_gcloud_auth()
         success(f"Authenticated as {cyan(current_user)}")
         click.echo()
 
