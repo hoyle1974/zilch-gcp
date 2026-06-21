@@ -116,20 +116,30 @@ def test_remove_terraform_lock_uses_force_unlock(mock_read):
 
 
 def test_remove_terraform_lock_fallback_no_executor():
-    """Test remove_terraform_lock uses gcloud fallback when executor is None."""
+    """Test remove_terraform_lock uses storage client fallback when executor is None."""
     import gcp
 
     with patch('gcp.read_terraform_lock_metadata') as mock_read:
-        with patch('gcp.subprocess.run') as mock_run:
+        with patch('gcp.storage.Client') as mock_storage_client:
             mock_read.return_value = {
                 "id": "abc123",
                 "operation": "apply",
                 "who": "user@example.com",
                 "created": "2026-06-21T10:30:00Z"
             }
-            mock_run.return_value = MagicMock(returncode=0)
+            # Mock the storage client chain
+            mock_client = MagicMock()
+            mock_bucket = MagicMock()
+            mock_blob = MagicMock()
+
+            mock_storage_client.return_value = mock_client
+            mock_client.bucket.return_value = mock_bucket
+            mock_bucket.blob.return_value = mock_blob
 
             result = gcp.remove_terraform_lock("test-bucket", "test-app", tf_executor=None)
             assert result is True
-            # Verify gcloud rm was called as fallback
-            assert "storage" in mock_run.call_args[0][0][1]
+            # Verify storage client was used as fallback
+            mock_storage_client.assert_called_once()
+            mock_client.bucket.assert_called_once_with("test-bucket")
+            mock_bucket.blob.assert_called_once_with("terraform/state/test-app/default.tflock")
+            mock_blob.delete.assert_called_once()

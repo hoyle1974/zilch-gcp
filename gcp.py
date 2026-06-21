@@ -37,7 +37,7 @@ def check_required_tools() -> None:
     Raises:
         GCPError: If required tools are missing
     """
-    required = ["gcloud", "terraform", "curl", "bq"]
+    required = ["terraform", "curl"]  # gcloud and bq now use Python clients
     missing = []
 
     for cmd in required:
@@ -54,8 +54,8 @@ def check_required_tools() -> None:
     if missing:
         error(f"Required tools not found: {', '.join(missing)}")
         raise GCPError(
-            f"Missing tools: {missing}. Install gcloud SDK: "
-            "https://cloud.google.com/sdk/docs/install"
+            f"Missing tools: {missing}. Install Terraform: "
+            "https://www.terraform.io/downloads"
         )
 
     success("Required tools available")
@@ -152,69 +152,6 @@ def validate_iam_permissions(project_id: str, current_user: str) -> None:
         raise GCPError(f"Failed to check IAM permissions: {str(e)}")
 
 
-def check_firestore_permissions(project_id: str, current_user: str) -> bool:
-    """Check if user has Firestore Admin role.
-
-    Args:
-        project_id: GCP project ID
-        current_user: Currently authenticated user email
-
-    Returns:
-        True if user has permission, False otherwise
-    """
-    try:
-        result = subprocess.run(
-            [
-                "gcloud",
-                "projects",
-                "get-iam-policy",
-                project_id,
-                "--flatten=bindings[].members",
-                "--filter=bindings.role:roles/datastore.admin",
-                "--format=value(bindings.members)",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
-
-        return f"user:{current_user}" in result.stdout
-    except subprocess.CalledProcessError:
-        return False
-
-
-def setup_firestore_permissions(project_id: str, current_user: str) -> bool:
-    """Attempt to grant user Firestore Admin role.
-
-    Args:
-        project_id: GCP project ID
-        current_user: Currently authenticated user email
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        subprocess.run(
-            [
-                "gcloud",
-                "projects",
-                "add-iam-policy-binding",
-                project_id,
-                f"--member=user:{current_user}",
-                "--role=roles/datastore.admin",
-                "--quiet",
-            ],
-            capture_output=True,
-            timeout=10,
-            check=True,
-        )
-        success("Firestore Admin role granted")
-        return True
-    except (subprocess.CalledProcessError, Exception):
-        return False
-
-
 def create_state_bucket(
     project_id: str, bucket_name: str, region: str
 ) -> None:
@@ -265,56 +202,6 @@ def create_state_bucket(
                 raise GCPError("Bucket not accessible after retries")
 
 
-def enable_required_apis(project_id: str, enable_mysql: bool = False) -> None:
-    """Enable required GCP APIs.
-
-    Args:
-        project_id: GCP project ID
-        enable_mysql: Whether to enable Compute Engine API for MySQL
-    """
-    info("Enabling required APIs")
-
-    apis = ["cloudresourcemanager.googleapis.com"]
-    if enable_mysql:
-        apis.append("compute.googleapis.com")
-
-    for api in apis:
-        try:
-            subprocess.run(
-                [
-                    "gcloud",
-                    "services",
-                    "enable",
-                    api,
-                    f"--project={project_id}",
-                    "--quiet",
-                ],
-                capture_output=True,
-                timeout=30,
-                check=True,
-            )
-            success(f"API enabled: {api.split('.')[0]}")
-        except subprocess.CalledProcessError as e:
-            warning(f"Failed to enable {api}: {e.stderr}")
-
-
-def set_project_context(project_id: str) -> None:
-    """Set gcloud default project.
-
-    Args:
-        project_id: GCP project ID
-    """
-    try:
-        subprocess.run(
-            ["gcloud", "config", "set", "project", project_id, "--quiet"],
-            capture_output=True,
-            timeout=10,
-            check=True,
-        )
-    except subprocess.CalledProcessError:
-        warning("Could not set gcloud project context")
-
-
 def check_terraform_lock_exists(state_bucket: str, app_name: str) -> bool:
     """Check if Terraform state lock file exists.
 
@@ -325,16 +212,11 @@ def check_terraform_lock_exists(state_bucket: str, app_name: str) -> bool:
     Returns:
         True if lock exists, False otherwise
     """
-    lock_path = f"gs://{state_bucket}/terraform/state/{app_name}/default.tflock"
-
     try:
-        result = subprocess.run(
-            ["gcloud", "storage", "ls", lock_path],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-        return result.returncode == 0
+        client = storage.Client()
+        bucket = client.bucket(state_bucket)
+        blob = bucket.blob(f"terraform/state/{app_name}/default.tflock")
+        return blob.exists()
     except Exception:
         return False
 
@@ -406,23 +288,20 @@ def remove_terraform_lock(
         return tf_executor.force_unlock(lock_metadata['id'])
 
     # Fallback: raw bucket deletion (should be rare)
-    lock_path = f"gs://{state_bucket}/terraform/state/{app_name}/default.tflock"
     try:
-        result = subprocess.run(
-            ["gcloud", "storage", "rm", lock_path],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-        return result.returncode == 0
+        client = storage.Client()
+        bucket = client.bucket(state_bucket)
+        blob = bucket.blob(f"terraform/state/{app_name}/default.tflock")
+        blob.delete()
+        return True
     except Exception:
         return False
 
 
 def get_billing_info(project_id: str) -> Optional[dict]:
-    """Get billing account info and current month spending for a project.
+    """Get billing account info for a project.
 
-    Queries BigQuery billing export if available, falls back to budget info.
+    Uses Cloud Billing Python client instead of gcloud CLI.
 
     Args:
         project_id: GCP project ID
@@ -431,103 +310,29 @@ def get_billing_info(project_id: str) -> Optional[dict]:
         Dict with 'currency', 'amount', 'account_name', or None if unavailable
     """
     try:
+        from google.cloud import billing_v1
+
+        client = billing_v1.CloudBillingClient()
+
         # Get billing account linked to this project
-        result = subprocess.run(
-            [
-                "gcloud",
-                "billing",
-                "projects",
-                "describe",
-                project_id,
-                "--format=value(billingAccountName)",
-            ],
-            capture_output=True,
-            timeout=10,
-            check=False,
-            text=True,
-        )
-
-        billing_account_full = result.stdout.strip()
-        if not billing_account_full:
-            return None
-
-        # Extract account ID
-        billing_account = billing_account_full.split("/")[-1] if "/" in billing_account_full else billing_account_full
-
-        # Get billing account display name
-        result = subprocess.run(
-            [
-                "gcloud",
-                "billing",
-                "accounts",
-                "describe",
-                billing_account,
-                "--format=value(displayName)",
-            ],
-            capture_output=True,
-            timeout=10,
-            check=False,
-            text=True,
-        )
-
-        account_name = result.stdout.strip() or billing_account
-
-        # Try to query BigQuery billing export for actual spend
         try:
-            from datetime import datetime
-
-            month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            start_date = month_start.strftime("%Y-%m-%d")
-
-            # Query billing export table for current month costs using parameterized queries
-            result = subprocess.run(
-                [
-                    "bq",
-                    "query",
-                    f"--project_id={project_id}",
-                    "--format=json",
-                    "--nouse_legacy_sql",
-                    f"--parameter=start_date:DATE:{start_date}",
-                ],
-                input=f"""
-SELECT
-  ROUND(SUM(CAST(cost as float64)), 2) as total_cost
-FROM `{project_id}.billing.gcp_billing_export_v1_*`
-WHERE _TABLE_SUFFIX >= FORMAT_DATE('%Y%m%d', @start_date)
-  AND _TABLE_SUFFIX < FORMAT_DATE('%Y%m%d', DATE_ADD(@start_date, INTERVAL 1 MONTH))
-LIMIT 1
-""",
-                capture_output=True,
-                timeout=15,
-                check=False,
-                text=True,
+            project_billing = client.get_project_billing_info(
+                name=f"projects/{project_id}"
             )
 
-            if result.returncode == 0:
-                import json
-                try:
-                    data = json.loads(result.stdout)
-                    if data and len(data) > 0 and "total_cost" in data[0]:
-                        amount = float(data[0]["total_cost"]) if data[0]["total_cost"] else 0.0
-                        return {
-                            "currency": "USD",
-                            "amount": amount,
-                            "account_name": account_name,
-                            "billing_account": billing_account,
-                        }
-                except (json.JSONDecodeError, ValueError, IndexError):
-                    pass
+            if not project_billing.billing_account_name:
+                return None
 
-        except Exception:
-            pass
+            # Extract billing account ID
+            billing_account = project_billing.billing_account_name.split("/")[-1]
 
-        # Fallback: return account info without actual spend
-        return {
-            "currency": "USD",
-            "amount": None,
-            "account_name": account_name,
-            "billing_account": billing_account,
-        }
-
+            return {
+                "currency": "USD",
+                "amount": None,  # Actual spend requires BigQuery billing export query
+                "account_name": billing_account,
+                "billing_account": billing_account,
+            }
+        except google_exceptions.NotFound:
+            return None
     except Exception:
         return None
