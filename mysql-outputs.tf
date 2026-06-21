@@ -18,12 +18,6 @@ output "mysql_database_name" {
   description = "Name of the initial MySQL database created"
 }
 
-output "mysql_user" {
-  value       = var.enable_mysql ? var.mysql_user : null
-  description = "MySQL user for application access"
-  sensitive   = true
-}
-
 output "mysql_root_password_secret" {
   value       = try(google_secret_manager_secret.mysql_root_password[0].id, null)
   description = "Secret Manager secret ID for MySQL root password"
@@ -65,16 +59,4 @@ output "zilch_mysql_port" {
 output "zilch_mysql_database" {
   value       = var.enable_mysql ? var.mysql_database_name : ""
   description = "Environment variable: ZILCH_MYSQL_DATABASE"
-}
-
-output "zilch_mysql_user" {
-  value       = var.enable_mysql ? var.mysql_user : ""
-  description = "Environment variable: ZILCH_MYSQL_USER"
-  sensitive   = true
-}
-
-output "zilch_mysql_password" {
-  value       = try(google_secret_manager_secret.mysql_app_password[0].id, "")
-  description = "Environment variable: ZILCH_MYSQL_PASSWORD (Secret Manager secret ID)"
-  sensitive   = true
 }
