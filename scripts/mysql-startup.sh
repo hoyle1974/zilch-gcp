@@ -22,21 +22,22 @@ log "Fetching MySQL credentials from Secret Manager..."
 RESOURCE_SUFFIX="${RESOURCE_SUFFIX}"
 PROJECT_ID="${PROJECT_ID}"
 
-# Retry secret fetches up to 3 times (metadata server takes time to be ready)
-for attempt in 1 2 3; do
+# Retry secret fetches up to 10 times with 10-second intervals (~100 seconds total)
+# GCP IAM bindings can take 60+ seconds to propagate after Terraform applies them
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
     MYSQL_ROOT_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-root-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}" 2>/dev/null | tr -d '\n' || echo "")
     MYSQL_APP_PASSWORD=$(gcloud secrets versions access latest --secret="zilch-mysql-app-password-${RESOURCE_SUFFIX}" --project="${PROJECT_ID}" 2>/dev/null | tr -d '\n' || echo "")
 
     if [ -n "$MYSQL_ROOT_PASSWORD" ] && [ -n "$MYSQL_APP_PASSWORD" ]; then
-        log "Secrets retrieved successfully"
+        log "Secrets retrieved successfully on attempt $attempt"
         break
     fi
 
-    if [ $attempt -lt 3 ]; then
+    if [ $attempt -lt 10 ]; then
         log "Attempt $attempt to fetch secrets failed, retrying in 10 seconds..."
         sleep 10
     else
-        log "ERROR: Failed to fetch secrets after 3 attempts"
+        log "ERROR: Failed to fetch secrets after 10 attempts (100+ seconds)"
         exit 1
     fi
 done
