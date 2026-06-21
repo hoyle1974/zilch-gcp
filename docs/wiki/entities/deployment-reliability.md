@@ -20,8 +20,8 @@ Zilch's deployment tool (`zilch.py`, implemented across `config.py`, `gcp.py`, `
 
 **Solution:**
 - `gcp.check_terraform_lock_exists(state_bucket, app_name)` detects a stale lock before `zilch.py` attempts Terraform operations
-- In **interactive mode**: `zilch.py` prompts for confirmation (`click.confirm("Remove stale lock and continue?")`) before calling `gcp.remove_terraform_lock()`
-- In **auto mode** (`--auto`): if a lock is found and removal isn't confirmable, `zilch.py` exits with a clear error rather than silently corrupting state
+- `zilch.py` always prompts for confirmation (`click.confirm("Remove stale lock and continue?", default=True)`) before calling `gcp.remove_terraform_lock()` — this happens regardless of whether `--auto` was passed; `_setup_gcp()` does not currently branch on the `auto` flag for lock handling
+- If the user declines (or removal fails), `zilch.py` exits with a clear error rather than silently corrupting state
 - Prevents silent failures that would be confusing to users
 
 ### 📦 Resource Import Recovery (State Reconciliation)
@@ -62,8 +62,10 @@ Zilch deployments are safe to run multiple times:
 `gcp.check_required_tools()` validates required tools before attempting deployment:
 - `gcloud` (Google Cloud CLI)
 - `terraform` (Infrastructure as Code)
+- `curl`
+- `bq` (BigQuery CLI)
 
-(`curl`/`bq` are no longer directly required by the orchestration layer — HTTP health checks use the `requests` library, and BigQuery cleanup uses `gcloud bigquery` rather than the legacy `bq` CLI.)
+All four must be present on `PATH` or `check_required_tools()` raises `GCPError` listing the missing tools.
 
 ### Cloud Shell Detection
 
@@ -218,7 +220,7 @@ python3 zilch.py status
 ### Phase 1 Scope Limitations
 
 Per `IMPLEMENTATION_SUMMARY.md`, the current Python implementation is Phase 1 of the migration. Notably not yet included:
-- No async support — uses `ThreadPoolExecutor`-style concurrency in the original plan was superseded by the sequential `StateImporter` design above for correctness; no concurrency is used for imports
+- No async support — `ThreadPoolExecutor`-style concurrency from the original plan was superseded by the sequential `StateImporter` design above for correctness
 - `.zilch.config` is still the `.ini`-style key=value format (a TOML migration is a Phase 2+ idea, not yet implemented)
 - No package distribution (`pip install zilch`) — `zilch.py` is run directly from the repo with a local virtualenv
 

@@ -53,7 +53,7 @@ This sequence is implemented by the `deploy` command in `zilch.py`, which delega
 
 `zilch.py deploy` verifies you're ready to deploy via `gcp.py`:
 
-✅ **Required tools** — `gcp.check_required_tools()` confirms `gcloud` and `terraform` are on `PATH` (and warns if not running in Cloud Shell, which has them preinstalled).
+✅ **Required tools** — `gcp.check_required_tools()` confirms `gcloud`, `terraform`, `curl`, and `bq` are all on `PATH` (and warns if not running in Cloud Shell, which has them preinstalled).
 
 ✅ **gcloud authentication** — `gcp.validate_gcloud_auth()` runs:
 ```bash
