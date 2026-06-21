@@ -399,6 +399,8 @@ def enable_required_apis(project_id: str, enable_mysql: bool) -> None:
                 stderr = result.stderr.decode("utf-8", errors="replace").strip()
                 if "already enabled" in stderr.lower():
                     success(f"API {api} already enabled")
+                elif "permission_denied" in stderr.lower():
+                    warning(f"Failed to enable {api}: Permission denied (requires Service Usage Admin role)")
                 else:
                     warning(f"Failed to enable {api}: {stderr[:100]}")
         except subprocess.TimeoutExpired:
