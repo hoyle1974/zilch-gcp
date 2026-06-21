@@ -380,14 +380,19 @@ def _cleanup_gcp_resources(config: ZilchConfig) -> None:
 
     for resource_name, cmd in resources_to_clean:
         try:
-            subprocess.run(
+            result = subprocess.run(
                 cmd,
                 capture_output=True,
                 timeout=30,
                 check=False,
             )
-        except Exception:
-            pass  # Silently continue
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace").strip() if result.stderr else "unknown error"
+                warning(f"Failed to delete {resource_name}: {stderr}")
+        except subprocess.TimeoutExpired:
+            warning(f"Timeout deleting {resource_name}")
+        except Exception as e:
+            warning(f"Error deleting {resource_name}: {e}")
 
 
 def _setup_monitoring(config: ZilchConfig, auto: bool) -> None:

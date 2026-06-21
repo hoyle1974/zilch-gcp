@@ -1,10 +1,9 @@
 """Interactive CLI prompts."""
 
-import os
-import sys
 from typing import Dict, List, Optional
 
 import click
+from InquirerPy import inquirer
 from rich.console import Console
 
 from config import ZilchConfig
@@ -235,101 +234,6 @@ def _apply_services_to_config(services: List[Dict[str, str | bool]], config: Zil
         setattr(config, attr_name, enabled)
 
 
-def _render_menu(console: Console, services: List[Dict[str, str | bool]], current_index: int) -> None:
-    """Render the service menu with side panel details.
-
-    Args:
-        console: Rich console for output
-        services: List of service dicts
-        current_index: Index of currently selected service
-    """
-    console.clear()
-    section("Services Configuration")
-    click.echo("Use arrow keys to navigate, space to toggle, enter to confirm")
-    click.echo()
-
-    # Left column width + divider + right column width
-    left_width = 30
-    divider = " │ "
-
-    for i, service in enumerate(services):
-        checkbox = "[x]" if service["enabled"] else "[ ]"
-        name = service["name"]
-        cursor = "→ " if i == current_index else "  "
-        left_line = f"{cursor}{checkbox} {name}"
-
-        # Pad left side to fixed width
-        left_padded = left_line.ljust(left_width)
-
-        # Get description for this service
-        meta = SERVICE_METADATA.get(service["key"], {})
-        right_text = meta.get("description", "")
-
-        # Combine left and right
-        full_line = f"{left_padded}{divider}{right_text}"
-
-        # Style selected row
-        if i == current_index:
-            styled_line = click.style(full_line, fg="cyan", bold=True)
-            click.echo(styled_line)
-        else:
-            click.echo(full_line)
-
-    # Show full details below the list
-    click.echo()
-    selected = services[current_index]
-    meta = SERVICE_METADATA.get(selected["key"], {})
-    click.echo(click.style("Details for " + selected["name"] + ":", fg="cyan", bold=True))
-    click.echo(f"  Docs: {meta.get('docs', 'N/A')}")
-    click.echo(f"  Cost: {meta.get('cost', 'N/A')}")
-
-
-def _get_key() -> str:
-    """Read a single key from stdin.
-
-    Returns:
-        Key string: 'up', 'down', 'space', 'enter', or the raw character
-    """
-    if os.name == 'nt':  # Windows
-        import msvcrt
-        key = msvcrt.getch()
-        if key == b'\x03':  # Ctrl+C
-            raise KeyboardInterrupt()
-        if key == b'\xe0':  # Arrow key prefix on Windows
-            next_key = msvcrt.getch()
-            if next_key == b'H':
-                return 'up'
-            elif next_key == b'P':
-                return 'down'
-        elif key == b' ':
-            return 'space'
-        elif key == b'\r':
-            return 'enter'
-    else:  # Unix/Linux/Mac
-        import tty
-        import termios
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = sys.stdin.read(1)
-            if ch == '\x03':  # Ctrl+C
-                raise KeyboardInterrupt()
-            if ch == '\x1b':  # Escape sequence
-                sys.stdin.read(1)  # Skip '['
-                ch = sys.stdin.read(1)
-                if ch == 'A':
-                    return 'up'
-                elif ch == 'B':
-                    return 'down'
-            elif ch == ' ':
-                return 'space'
-            elif ch == '\r':
-                return 'enter'
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-    return 'unknown'
 
 
 def get_services_interactive(config: ZilchConfig) -> ZilchConfig:
@@ -344,28 +248,35 @@ def get_services_interactive(config: ZilchConfig) -> ZilchConfig:
     section("Services Configuration")
 
     services = _build_service_list(config)
-    current_index = 0
-    console = Console()
 
-    while True:
-        _render_menu(console, services, current_index)
+    # Build checkbox choices with descriptions
+    choices = []
+    for service in services:
+        meta = SERVICE_METADATA.get(service["key"], {})
+        label = f"{service['name']} — {meta.get('description', '')}"
+        choices.append({
+            "name": label,
+            "value": service["key"],
+            "enabled": service["enabled"],
+        })
 
-        key = _get_key()
+    click.echo()
+    selected_keys = inquirer.checkbox(
+        message="Select services (toggle with Space, navigate with arrows, confirm with Enter):",
+        choices=choices,
+        border=True,
+        instruction="Use arrow keys to navigate, space to toggle, enter to confirm",
+    ).execute()
 
-        if key == 'down':
-            current_index = (current_index + 1) % len(services)
-        elif key == 'up':
-            current_index = (current_index - 1) % len(services)
-        elif key == 'space':
-            services[current_index]["enabled"] = not services[current_index]["enabled"]
-        elif key == 'enter':
-            break
+    # Update services based on selection
+    selected_set = set(selected_keys)
+    for service in services:
+        service["enabled"] = service["key"] in selected_set
 
     # Apply selections to config
     _apply_services_to_config(services, config)
 
     # Show summary
-    console.clear()
     section("Selected Services")
     enabled = [s["name"] for s in services if s["enabled"]]
     if enabled:

@@ -1,5 +1,7 @@
 """Configuration management using Pydantic."""
 
+import configparser
+import io
 import re
 from pathlib import Path
 from typing import Optional
@@ -119,25 +121,16 @@ class ZilchConfig(BaseModel):
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found: {path}")
 
-        config_dict = {}
         with open(config_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
+            content = f.read()
 
-                if "=" not in line:
-                    continue
+        # Prepend [DEFAULT] section for configparser to parse as key-value pairs
+        config_content = "[DEFAULT]\n" + content
 
-                key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip()
+        parser = configparser.ConfigParser()
+        parser.read_string(config_content)
 
-                # Remove surrounding quotes (handle multiple layers)
-                while value.startswith('"') and value.endswith('"'):
-                    value = value[1:-1]
-
-                config_dict[key] = value
+        config_dict = dict(parser.defaults())
 
         try:
             return cls(**config_dict)
