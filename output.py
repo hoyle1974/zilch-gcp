@@ -133,3 +133,22 @@ def print_deployment_summary(config: dict, outputs: dict, billing_info: dict = N
         click.echo(f"  ↳ {env_var} : {value}")
 
     click.echo()
+
+
+def get_outcome_indicator(outcome: str) -> str:
+    """Get emoji/text indicator for cleanup outcome.
+
+    Args:
+        outcome: One of "deleted", "already_gone", "permission_denied", "timeout", "error"
+
+    Returns:
+        Indicator string with emoji
+    """
+    indicators = {
+        "deleted": "✓",
+        "already_gone": "ℹ️",
+        "permission_denied": "🔐",
+        "timeout": "⏱️",
+        "error": "🚫",
+    }
+    return indicators.get(outcome, "?")
