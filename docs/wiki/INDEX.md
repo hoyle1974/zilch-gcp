@@ -32,10 +32,6 @@ A minimal knowledge base for understanding Zilch. This wiki synthesizes how Zilc
 
 ---
 
-## Roadmap & Future Plans
-
-- **[MySQL Service Plan](topics/roadmap-mysql-service.md)** — Planned relational SQL database support
-
 ---
 
 ## Troubleshooting
