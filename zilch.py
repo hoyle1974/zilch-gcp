@@ -267,7 +267,11 @@ def teardown(force: bool) -> None:
 
         # Manual cleanup of resources that might not be terraform-managed
         section("Manual Cleanup")
-        _cleanup_gcp_resources(config)
+        cleanup_results = _cleanup_gcp_resources(config)
+
+        # Show summary of cleanup results
+        from output import print_cleanup_summary
+        print_cleanup_summary(cleanup_results)
 
         # Clean up state bucket
         state_bucket = f"{config.gcp_project_id}-zilch-tfstate"
@@ -361,7 +365,7 @@ def status() -> None:
         sys.exit(1)
 
 
-def _cleanup_gcp_resources(config: ZilchConfig) -> None:
+def _cleanup_gcp_resources(config: ZilchConfig) -> dict:
     """Manually clean up GCP resources that terraform might have missed."""
     resources_to_clean = [
         ("Cloud Run", ["gcloud", "run", "services", "delete", config.app_name, f"--region={config.gcp_region}", "--quiet"]),
