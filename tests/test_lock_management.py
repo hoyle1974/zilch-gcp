@@ -113,3 +113,23 @@ def test_remove_terraform_lock_uses_force_unlock(mock_read):
     result = gcp.remove_terraform_lock("test-bucket", "test-app", mock_executor)
     assert result is True
     mock_executor.force_unlock.assert_called_once_with("abc123")
+
+
+def test_remove_terraform_lock_fallback_no_executor():
+    """Test remove_terraform_lock uses gcloud fallback when executor is None."""
+    import gcp
+
+    with patch('gcp.read_terraform_lock_metadata') as mock_read:
+        with patch('gcp.subprocess.run') as mock_run:
+            mock_read.return_value = {
+                "id": "abc123",
+                "operation": "apply",
+                "who": "user@example.com",
+                "created": "2026-06-21T10:30:00Z"
+            }
+            mock_run.return_value = MagicMock(returncode=0)
+
+            result = gcp.remove_terraform_lock("test-bucket", "test-app", tf_executor=None)
+            assert result is True
+            # Verify gcloud rm was called as fallback
+            assert "storage" in mock_run.call_args[0][0][1]

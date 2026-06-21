@@ -2,7 +2,19 @@
 
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
+import sys
+
+# Mock google.cloud imports before any test imports gcp
+sys.modules['google'] = MagicMock()
+sys.modules['google.auth'] = MagicMock()
+sys.modules['google.auth.transport'] = MagicMock()
+sys.modules['google.auth.transport.requests'] = MagicMock()
+sys.modules['google.cloud'] = MagicMock()
+sys.modules['google.iam'] = MagicMock()
+sys.modules['google.iam.v1'] = MagicMock()
+sys.modules['google.api_core'] = MagicMock()
+sys.modules['google.api_core.exceptions'] = MagicMock()
 
 
 @pytest.fixture
