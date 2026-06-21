@@ -82,8 +82,18 @@ def validate_gcloud_auth() -> tuple[str, object]:
         elif hasattr(credentials, '_service_account_email'):
             current_user = credentials._service_account_email
         else:
-            # For user credentials, extract from token
-            current_user = getattr(credentials, 'quota_project_id', 'unknown@google.com')
+            # For user credentials, try to get from gcloud config
+            try:
+                result = subprocess.run(
+                    ["gcloud", "config", "get-value", "account"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=True,
+                )
+                current_user = result.stdout.strip()
+            except Exception:
+                current_user = None
 
         if not current_user or "@" not in current_user:
             raise GCPError("Could not determine authenticated account email")
