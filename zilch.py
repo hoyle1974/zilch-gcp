@@ -393,10 +393,10 @@ def _cleanup_gcp_resources(config: ZilchConfig) -> dict:
         ("Cloud Build logs bucket", ["gcloud", "storage", "buckets", "delete", f"gs://{config.gcp_project_id}_cloudbuild", "--quiet"]),
         ("Firestore database", ["gcloud", "firestore", "databases", "delete", "--database=(default)", "--quiet"]),
         ("Artifact Registry", ["gcloud", "artifacts", "repositories", "delete", f"{config.app_name}-images", f"--location={config.gcp_region}", "--quiet"]),
-        ("BigQuery dataset", ["gcloud", "bigquery", "datasets", "delete", "--dataset=" + config.app_name.replace("-", "_") + "_analytics", "--quiet"]),
+        ("BigQuery dataset", ["bq", "rm", "-r", "-f", "-d", config.app_name.replace("-", "_") + "_analytics"]),
         ("Cloud Build trigger", ["gcloud", "builds", "triggers", "delete", f"{config.app_name}-trigger", "--quiet"]),
         ("Cloud Tasks queue", ["gcloud", "tasks", "queues", "delete", f"{config.app_name}-jobs", f"--location={config.gcp_region}", "--quiet"]),
-        ("KMS keyring", ["gcloud", "kms", "keyrings", "delete", f"{config.app_name}-keyring", f"--location={config.gcp_region}", "--quiet"]),
+        ("KMS crypto key", ["gcloud", "kms", "keys", "versions", "destroy", "1", "--key", f"{config.app_name}-key", "--keyring", f"{config.app_name}-keyring", f"--location={config.gcp_region}", "--quiet"]),
     ]
 
     for resource_name, cmd in resources_to_clean:
@@ -423,21 +423,36 @@ def _cleanup_gcp_resources(config: ZilchConfig) -> dict:
                 from output import get_outcome_indicator
 
                 # Determine outcome category
-                if "not found" in error_text.lower() or "not_found" in error_text.lower() or "does not exist" in error_text.lower():
+                error_lower = error_text.lower()
+
+                if "not found" in error_lower or "not_found" in error_lower or "does not exist" in error_lower:
                     outcome = "already_gone"
                     indicator = get_outcome_indicator(outcome)
                     click.echo(f"{indicator} {resource_name}: already gone")
                     results[outcome].append((resource_name, error_text))
-                elif "permission_denied" in error_text.lower() or "permission denied" in error_text.lower() or "iam_permission_denied" in error_text.lower():
+                elif "permission_denied" in error_lower or "permission denied" in error_lower or "iam_permission_denied" in error_lower or "403" in error_text or "forbidden" in error_lower:
                     outcome = "permission_denied"
                     indicator = get_outcome_indicator(outcome)
                     click.echo(f"{indicator} {resource_name}: permission denied")
                     results[outcome].append((resource_name, error_text))
+                elif "failed_precondition" in error_lower or "already scheduled" in error_lower or "already deleted" in error_lower:
+                    # Resource is in a transitional state or already handled
+                    outcome = "already_gone"
+                    indicator = get_outcome_indicator(outcome)
+                    click.echo(f"{indicator} {resource_name}: already gone (scheduled for deletion)")
+                    results[outcome].append((resource_name, error_text))
+                elif "deleting" in error_lower and result.returncode != 0:
+                    # Cloud Run "Deleting..." messages that fail - might be async in progress
+                    outcome = "already_gone"
+                    indicator = get_outcome_indicator(outcome)
+                    click.echo(f"{indicator} {resource_name}: deletion in progress")
+                    results[outcome].append((resource_name, error_text))
                 else:
-                    # Generic error
+                    # Generic error - show first line of error for diagnostics
                     outcome = "error"
                     indicator = get_outcome_indicator(outcome)
-                    click.echo(f"{indicator} {resource_name}: error")
+                    error_summary = error_text.split('\n')[0][:80] if error_text else "unknown error"
+                    click.echo(f"{indicator} {resource_name}: error ({error_summary})")
                     results[outcome].append((resource_name, error_text))
 
         except subprocess.TimeoutExpired:
