@@ -390,7 +390,7 @@ def _cleanup_gcp_resources(config: ZilchConfig) -> dict:
         ("Pub/Sub topic (events)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-events", "--quiet"]),
         ("Pub/Sub topic (budget alerts)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-budget-alerts", "--quiet"]),
         ("Pub/Sub subscription (events)", ["gcloud", "pubsub", "subscriptions", "delete", f"{config.app_name}-events-subscription", "--quiet"]),
-        ("Cloud Build logs bucket", ["gcloud", "storage", "buckets", "delete", f"gs://{config.gcp_project_id}_cloudbuild", "--quiet"]),
+        ("Cloud Build logs bucket", ["gcloud", "storage", "rm", "-r", f"gs://{config.gcp_project_id}_cloudbuild", "--quiet"]),
         ("Firestore database", ["gcloud", "firestore", "databases", "delete", "--database=(default)", "--quiet"]),
         ("Artifact Registry", ["gcloud", "artifacts", "repositories", "delete", f"{config.app_name}-images", f"--location={config.gcp_region}", "--quiet"]),
         ("BigQuery dataset", ["bq", "rm", "-r", "-f", "-d", config.app_name.replace("-", "_") + "_analytics"]),

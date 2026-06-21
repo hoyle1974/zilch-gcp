@@ -195,3 +195,34 @@ def print_cleanup_summary(results: dict) -> None:
         click.echo(f"{indicator} Errors: {counts['error']} resource(s)")
 
     click.echo()
+
+    # Detailed diagnostics for failures
+    if results.get("permission_denied") or results.get("error"):
+        section("Diagnostics")
+
+        # Permission denied details
+        if results.get("permission_denied"):
+            click.echo(f"\n{get_outcome_indicator('permission_denied')} Permission Issues ({len(results['permission_denied'])} resource(s)):")
+            for resource_name, error_msg in results["permission_denied"]:
+                click.echo(f"  • {resource_name}")
+                # Extract permission-related info from error
+                if error_msg:
+                    error_lines = error_msg.split('\n')
+                    # Show lines that contain permission info (usually has "Permission", "denied", or "PERMISSION_DENIED")
+                    for line in error_lines[:3]:  # Show first 3 lines of error
+                        if line.strip():
+                            click.echo(f"    {line[:100]}")
+
+        # Error details
+        if results.get("error"):
+            click.echo(f"\n{get_outcome_indicator('error')} Errors ({len(results['error'])} resource(s)):")
+            for resource_name, error_msg in results["error"]:
+                click.echo(f"  • {resource_name}")
+                if error_msg:
+                    error_lines = error_msg.split('\n')
+                    # Show first 2 lines of error message
+                    for line in error_lines[:2]:
+                        if line.strip():
+                            click.echo(f"    {line[:100]}")
+
+        click.echo()
