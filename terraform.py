@@ -227,7 +227,7 @@ class TerraformExecutor:
             raise TerraformError("Terraform apply timed out")
 
     def destroy(self, vars_dict: Dict[str, str], force: bool = False) -> bool:
-        """Destroy Terraform infrastructure.
+        """Destroy Terraform infrastructure with progress feedback.
 
         Args:
             vars_dict: Dictionary of Terraform variables
@@ -256,14 +256,29 @@ class TerraformExecutor:
 
         cmd.extend(var_args)
 
-        info("Running terraform destroy...")
         try:
             result = subprocess.run(
                 cmd,
                 timeout=600,  # 10 minutes
                 check=False,  # Don't fail on non-zero exit - allow cleanup to continue
                 cwd=str(self.working_dir),
+                capture_output=True,  # Capture output to parse and summarize
+                text=True,
             )
+
+            # Parse output to extract resource counts for progress display
+            output_lines = (result.stdout + result.stderr).split('\n') if result.stdout or result.stderr else []
+
+            # Count resource refresh lines to show progress
+            refresh_count = sum(1 for line in output_lines if 'Refreshing state' in line)
+            destroy_count = sum(1 for line in output_lines if 'destroyed' in line.lower())
+
+            # Show progress summary
+            if refresh_count > 0 or destroy_count > 0:
+                info(f"Destroying resources ({refresh_count} resources, {destroy_count} to delete)...")
+            else:
+                info("Running terraform destroy...")
+
             if result.returncode == 0:
                 success("Infrastructure destroyed")
                 return True
