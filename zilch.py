@@ -449,6 +449,17 @@ def _setup_gcp(config: ZilchConfig) -> TerraformExecutor:
     # Check for stale Terraform lock
     if gcp.check_terraform_lock_exists(state_bucket, config.app_name):
         warning("Found existing Terraform state lock")
+
+        # Show lock details before asking
+        lock_metadata = gcp.read_terraform_lock_metadata(state_bucket, config.app_name)
+        if lock_metadata:
+            info("Lock Details:")
+            info(f"  ID: {lock_metadata['id']}")
+            info(f"  Operation: {lock_metadata['operation']}")
+            info(f"  Held by: {lock_metadata['who']}")
+            info(f"  Created: {lock_metadata['created']}")
+            click.echo()
+
         if click.confirm("Remove stale lock and continue?", default=True):
             if not gcp.remove_terraform_lock(state_bucket, config.app_name, tf):
                 error("Failed to remove lock")

@@ -280,8 +280,6 @@ def remove_terraform_lock(
 ) -> bool:
     """Remove stale Terraform lock file using direct GCS deletion.
 
-    Reads lock metadata first to determine if lock is stale.
-
     Args:
         state_bucket: Name of Terraform state bucket
         app_name: Application name
@@ -290,19 +288,6 @@ def remove_terraform_lock(
     Returns:
         True if successful, False otherwise
     """
-    lock_metadata = read_terraform_lock_metadata(state_bucket, app_name)
-
-    if not lock_metadata:
-        info("No Terraform lock found")
-        return True
-
-    # Display lock metadata to user
-    info(f"Lock Details:")
-    info(f"  ID: {lock_metadata['id']}")
-    info(f"  Operation: {lock_metadata['operation']}")
-    info(f"  Held by: {lock_metadata['who']}")
-    info(f"  Created: {lock_metadata['created']}")
-
     # Use direct GCS deletion to avoid terraform force-unlock deadlock
     # (force-unlock tries to acquire a lock itself, causing a timeout)
     try:
