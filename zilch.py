@@ -366,13 +366,29 @@ def status() -> None:
 
 
 def _cleanup_gcp_resources(config: ZilchConfig) -> dict:
-    """Manually clean up GCP resources that terraform might have missed."""
+    """Manually clean up GCP resources, collect and categorize results.
+
+    Returns dict with outcome categories:
+        "deleted": list of (resource_name, None) tuples
+        "already_gone": list of (resource_name, reason) tuples
+        "permission_denied": list of (resource_name, reason) tuples
+        "timeout": list of (resource_name, None) tuples
+        "error": list of (resource_name, reason) tuples
+    """
+    results = {
+        "deleted": [],
+        "already_gone": [],
+        "permission_denied": [],
+        "timeout": [],
+        "error": [],
+    }
+
     resources_to_clean = [
         ("Cloud Run", ["gcloud", "run", "services", "delete", config.app_name, f"--region={config.gcp_region}", "--quiet"]),
         ("Service account (app)", ["gcloud", "iam", "service-accounts", "delete", f"{config.app_name}@{config.gcp_project_id}.iam.gserviceaccount.com", "--quiet"]),
         ("Service account (Cloud Build)", ["gcloud", "iam", "service-accounts", "delete", f"{config.app_name}-builder@{config.gcp_project_id}.iam.gserviceaccount.com", "--quiet"]),
         ("Pub/Sub topic (events)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-events", "--quiet"]),
-        ("Pub/Sub topic (budget)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-budget-alerts", "--quiet"]),
+        ("Pub/Sub topic (budget alerts)", ["gcloud", "pubsub", "topics", "delete", f"{config.app_name}-budget-alerts", "--quiet"]),
         ("Pub/Sub subscription (events)", ["gcloud", "pubsub", "subscriptions", "delete", f"{config.app_name}-events-subscription", "--quiet"]),
         ("Cloud Build logs bucket", ["gcloud", "storage", "buckets", "delete", f"gs://{config.gcp_project_id}_cloudbuild", "--quiet"]),
         ("Firestore database", ["gcloud", "firestore", "databases", "delete", "--database=(default)", "--quiet"]),
@@ -391,13 +407,51 @@ def _cleanup_gcp_resources(config: ZilchConfig) -> dict:
                 timeout=30,
                 check=False,
             )
-            if result.returncode != 0:
-                stderr = result.stderr.decode("utf-8", errors="replace").strip() if result.stderr else "unknown error"
-                warning(f"Failed to delete {resource_name}: {stderr}")
+
+            if result.returncode == 0:
+                # Success
+                from output import get_outcome_indicator
+                indicator = get_outcome_indicator("deleted")
+                click.echo(f"{indicator} {resource_name} deleted")
+                results["deleted"].append((resource_name, None))
+            else:
+                # Categorize failure
+                stderr = result.stderr.decode("utf-8", errors="replace").strip() if result.stderr else ""
+                stdout = result.stdout.decode("utf-8", errors="replace").strip() if result.stdout else ""
+                error_text = stderr or stdout
+
+                from output import get_outcome_indicator
+
+                # Determine outcome category
+                if "not found" in error_text.lower() or "not_found" in error_text.lower() or "does not exist" in error_text.lower():
+                    outcome = "already_gone"
+                    indicator = get_outcome_indicator(outcome)
+                    click.echo(f"{indicator} {resource_name}: already gone")
+                    results[outcome].append((resource_name, error_text))
+                elif "permission_denied" in error_text.lower() or "permission denied" in error_text.lower() or "iam_permission_denied" in error_text.lower():
+                    outcome = "permission_denied"
+                    indicator = get_outcome_indicator(outcome)
+                    click.echo(f"{indicator} {resource_name}: permission denied")
+                    results[outcome].append((resource_name, error_text))
+                else:
+                    # Generic error
+                    outcome = "error"
+                    indicator = get_outcome_indicator(outcome)
+                    click.echo(f"{indicator} {resource_name}: error")
+                    results[outcome].append((resource_name, error_text))
+
         except subprocess.TimeoutExpired:
-            warning(f"Timeout deleting {resource_name}")
+            from output import get_outcome_indicator
+            indicator = get_outcome_indicator("timeout")
+            click.echo(f"{indicator} {resource_name}: timeout")
+            results["timeout"].append((resource_name, None))
         except Exception as e:
-            warning(f"Error deleting {resource_name}: {e}")
+            from output import get_outcome_indicator
+            indicator = get_outcome_indicator("error")
+            click.echo(f"{indicator} {resource_name}: error")
+            results["error"].append((resource_name, str(e)))
+
+    return results
 
 
 def _setup_monitoring(config: ZilchConfig, auto: bool) -> None:
