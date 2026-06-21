@@ -185,14 +185,24 @@ def create_state_bucket(
         success("Using existing bucket")
         return
 
-    # Create bucket with uniform bucket-level access
+    # Create bucket with uniform bucket-level access and versioning
     try:
         bucket.location = region
         bucket.iam_configuration.uniform_bucket_level_access_enabled = True
+        bucket.versioning_enabled = True  # Required for Terraform state locking
         bucket.create()
         success("Created bucket")
     except google_exceptions.Conflict:
         success("Using existing bucket")
+        # Ensure versioning is enabled on existing bucket
+        try:
+            bucket.reload()
+            if not bucket.versioning_enabled:
+                bucket.versioning_enabled = True
+                bucket.patch()
+                success("Enabled versioning on existing bucket")
+        except Exception:
+            pass  # Continue even if we can't enable versioning
         return
     except Exception as e:
         raise GCPError(f"Failed to create state bucket: {str(e)}")
