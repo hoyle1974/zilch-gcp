@@ -140,7 +140,7 @@ fi
 log "Waiting for MySQL to accept connections..."
 MYSQL_READY=false
 for i in {1..120}; do
-    if docker exec mysql-server mysql -u"$MYSQL_USER" -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1" > /dev/null 2>&1; then
+    if docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql-server mysql -u"$MYSQL_USER" -e "SELECT 1" > /dev/null 2>&1; then
         log "MySQL is ready and accepting connections"
         MYSQL_READY=true
         break
@@ -159,7 +159,7 @@ fi
 
 # Verify database and user are created
 log "Verifying database and user..."
-docker exec mysql-server mysql -u"$MYSQL_USER" -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES LIKE '$MYSQL_DATABASE';" 2>&1 | tee -a /var/log/zilch-mysql-startup.log || true
-docker exec mysql-server mysql -u"$MYSQL_USER" -p"$MYSQL_ROOT_PASSWORD" -e "SELECT User FROM mysql.user WHERE User='$MYSQL_APP_USER';" 2>&1 | tee -a /var/log/zilch-mysql-startup.log || true
+docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql-server mysql -u"$MYSQL_USER" -e "SHOW DATABASES LIKE '$MYSQL_DATABASE';" 2>&1 | tee -a /var/log/zilch-mysql-startup.log || true
+docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql-server mysql -u"$MYSQL_USER" -e "SELECT User FROM mysql.user WHERE User='$MYSQL_APP_USER';" 2>&1 | tee -a /var/log/zilch-mysql-startup.log || true
 
 log "MySQL initialization complete"

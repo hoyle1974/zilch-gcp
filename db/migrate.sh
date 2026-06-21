@@ -57,13 +57,14 @@ run_sql() {
     if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] $query"
     else
+        export MYSQL_PWD="$MYSQL_PASSWORD"
         mysql \
             -h "$MYSQL_HOST" \
             -P "$MYSQL_PORT" \
             -u "$MYSQL_USER" \
-            ${MYSQL_PASSWORD:+-p"$MYSQL_PASSWORD"} \
             "$MYSQL_DATABASE" \
             -e "$query"
+        unset MYSQL_PWD
     fi
 }
 
@@ -77,13 +78,14 @@ run_sql_file() {
         echo "..."
     else
         log "Executing: $(basename "$file")"
+        export MYSQL_PWD="$MYSQL_PASSWORD"
         mysql \
             -h "$MYSQL_HOST" \
             -P "$MYSQL_PORT" \
             -u "$MYSQL_USER" \
-            ${MYSQL_PASSWORD:+-p"$MYSQL_PASSWORD"} \
             "$MYSQL_DATABASE" \
             < "$file"
+        unset MYSQL_PWD
     fi
 }
 

@@ -109,14 +109,14 @@ resource "random_password" "mysql_root" {
   count            = var.enable_mysql ? 1 : 0
   length           = var.mysql_root_password_length
   special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  override_special = "._-@,/"
 }
 
 resource "random_password" "mysql_app_user" {
   count            = var.enable_mysql ? 1 : 0
   length           = var.mysql_root_password_length
   special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  override_special = "._-@,/"
 }
 
 resource "random_integer" "mysql_port" {
