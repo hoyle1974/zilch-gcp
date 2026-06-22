@@ -634,6 +634,13 @@ def _reconcile_state(tf: TerraformExecutor, config: ZilchConfig) -> None:
                 "Cloud Build logs bucket",
             )
         )
+        resources.append(
+            (
+                "google_cloudbuild_trigger.app_build[0]",
+                f"{config.app_name}-trigger",
+                "Cloud Build trigger",
+            )
+        )
 
     if config.enable_cloud_tasks:
         resources.append(
