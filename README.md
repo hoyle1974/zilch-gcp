@@ -226,6 +226,8 @@ This safely deletes:
 
 ## Monitoring & Logs
 
+With `enable_monitoring`, Zilch also creates an uptime check on `GET /health` (every 5 minutes, so your app should answer 200 there without authentication), an alert when it fails for 5 minutes, and an alert for more than 3 server errors (5xx) in 5 minutes. Alerts go to a Pub/Sub channel; set `alert_email=you@example.com` in `.zilch.config` to also get email.
+
 View your app's logs:
 
 ```bash
@@ -380,6 +382,12 @@ See the [wiki](docs/wiki/INDEX.md) for:
 ## Reference Application
 
 Clone [`zilch-reference-app`](https://github.com/hoyle1974/zilch-reference-app) to see a working example Flask application that demonstrates all Zilch services.
+
+### A real app built on Zilch: `now`
+
+[`now`](https://github.com/hoyle1974/now) is a personal, single-user todo app (FastAPI + Firestore + a vanilla-JS PWA) that runs on a Zilch-provisioned project. It shows the intended split: **Zilch owns the infrastructure** (APIs, Cloud Run service, Firestore with point-in-time recovery, service account, monitoring) and **the app owns its own deploys and wiring** (`gcloud run deploy`, its env vars, secrets, bucket and Scheduler job). Its `.zilch.config` supplies the project, region and app name to the app's scripts, and `now` documents how to fork it: [`docs/okf/ops/forking.md`](https://github.com/hoyle1974/now/blob/main/docs/okf/ops/forking.md).
+
+Lessons from running it that are now built in: Terraform ignores the Cloud Run service's image, environment and gcloud client fields after creation (so `terraform apply` cannot strip variables or secrets your app's deploys added), Firestore point-in-time recovery is pinned on, and the optional storage bucket is private by construction.
 
 ## Contributing
 

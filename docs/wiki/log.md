@@ -27,3 +27,9 @@ main.tf: `google_firestore_database.default` now states `point_in_time_recovery_
 ## [2026-09-20] update | Ignore gcloud client fields on the Cloud Run service
 
 main.tf: `client` and `client_version` (set by `gcloud run deploy`) are added to `ignore_changes`; after the `now` app was deployed into the zilch-managed service, a plan wanted to null them. Applied the monitoring changes from 1f76d72 to the `now` project; plan is clean.
+
+---
+
+## [2026-09-20] update | README: real-world reference (`now`), monitoring resources
+
+README.md: added "A real app built on Zilch: now" under Reference Application (the infrastructure/app split and the lessons now built in) and described the uptime check, 5xx alert and `alert_email` under Monitoring & Logs.
