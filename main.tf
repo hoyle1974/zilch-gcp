@@ -242,11 +242,16 @@ resource "google_cloud_run_v2_service" "app" {
     }
   }
 
-  # Prevents Terraform from overwriting the Docker image (managed by gcloud/Cloud Build)
-  # Environment variables ARE managed by Terraform and trigger new revisions when changed
+  # Prevents Terraform from overwriting what the app's own deploys manage: the image
+  # (gcloud/Cloud Build) and the environment. Env vars and secret references added with
+  # `gcloud run services update` (ALLOWED_EMAIL, WIDGET_TOKEN, ...) would otherwise be
+  # stripped by the next `terraform apply`. Trade-off: the ZILCH_* vars below are
+  # written when the service is created and are not updated when features are toggled
+  # later (change them with `gcloud run services update`, or recreate the service).
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].containers[0].env,
     ]
   }
 
@@ -677,6 +682,10 @@ resource "google_storage_bucket" "app" {
   name          = "${var.app_name}-storage-${random_id.bucket_suffix.hex}"
   location      = var.gcp_region
   force_destroy = true
+
+  # Private by construction: no public ACLs or IAM, ever.
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
 }
 
 resource "google_project_iam_member" "storage" {

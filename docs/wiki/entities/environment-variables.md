@@ -196,3 +196,9 @@ To change which variables are available:
 ---
 
 **Tip:** Use environment variables for configuration, not hardcoding. This makes your app portable and testable.
+
+## Variables Zilch Does Not Manage
+
+Zilch writes the `ZILCH_*` variables when it **creates** the Cloud Run service. After that, Terraform ignores the service's image *and* environment (`lifecycle.ignore_changes` in `main.tf`), so anything your app's own tooling adds with `gcloud run services update` (an allowed-user email, a secret reference, a scheduler audience) survives later `terraform apply` runs.
+
+Trade-off: toggling a feature in `.zilch.config` later provisions the resource but does **not** update the matching `ZILCH_*` variable on an existing service. Set it yourself (`gcloud run services update SERVICE --update-env-vars ZILCH_...=...`) or recreate the service.
