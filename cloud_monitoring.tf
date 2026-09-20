@@ -105,26 +105,48 @@ resource "google_monitoring_notification_channel" "app_alerts" {
   }
 }
 
-# Alert Policy: High error rate on Cloud Run (triggers circuit breaker)
-# Note: This is a simplified alert - in production, use error_count metric instead
+# Optional email channel, alongside the Pub/Sub one.
+resource "google_monitoring_notification_channel" "app_email" {
+  count        = var.enable_monitoring && var.alert_email != "" ? 1 : 0
+  display_name = "${var.app_name} Alerts (email)"
+  type         = "email"
+  enabled      = true
+  project      = var.gcp_project_id
+
+  labels = {
+    email_address = var.alert_email
+  }
+}
+
+locals {
+  alert_channels = var.enable_monitoring ? concat(
+    [google_monitoring_notification_channel.app_alerts[0].id],
+    google_monitoring_notification_channel.app_email[*].id,
+  ) : []
+}
+
+# Alert Policy: server errors. Fires when the service returns more than 3 5xx
+# responses in 5 minutes. (The resource keeps its old address, so an existing
+# policy is updated in place; it used to alert on any high request count.)
 resource "google_monitoring_alert_policy" "cloud_run_errors" {
   count        = var.enable_monitoring ? 1 : 0
-  display_name = "${var.app_name} - High Error Rate Alert"
+  display_name = "${var.app_name} - 5xx responses"
   project      = var.gcp_project_id
   combiner     = "OR"
 
   conditions {
-    display_name = "Cloud Run High Error Rate"
+    display_name = "Cloud Run 5xx responses"
 
     condition_threshold {
-      filter          = "resource.type=\"cloud_run_revision\" AND resource.label.service_name=\"${var.app_name}\" AND metric.type=\"run.googleapis.com/request_count\""
-      duration        = "60s"
+      filter          = "resource.type=\"cloud_run_revision\" AND resource.label.service_name=\"${var.app_name}\" AND metric.type=\"run.googleapis.com/request_count\" AND metric.label.response_code_class=\"5xx\""
+      duration        = "0s"
       comparison      = "COMPARISON_GT"
-      threshold_value = 100
+      threshold_value = 3
 
       aggregations {
-        alignment_period   = "60s"
-        per_series_aligner = "ALIGN_RATE"
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_DELTA"
+        cross_series_reducer = "REDUCE_SUM"
       }
 
       trigger {
@@ -133,7 +155,63 @@ resource "google_monitoring_alert_policy" "cloud_run_errors" {
     }
   }
 
-  notification_channels = var.enable_monitoring ? [google_monitoring_notification_channel.app_alerts[0].id] : []
+  notification_channels = local.alert_channels
+}
+
+# Uptime check on GET /health (public by design on the app) every 5 minutes.
+resource "google_monitoring_uptime_check_config" "health" {
+  count        = var.enable_monitoring ? 1 : 0
+  display_name = "${var.app_name}-health"
+  project      = var.gcp_project_id
+  timeout      = "10s"
+  period       = "300s"
+
+  http_check {
+    path         = "/health"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      project_id = var.gcp_project_id
+      host       = trimprefix(google_cloud_run_v2_service.app.uri, "https://")
+    }
+  }
+}
+
+# Alert Policy: the uptime check has been failing for 5 minutes.
+resource "google_monitoring_alert_policy" "health_check_failing" {
+  count        = var.enable_monitoring ? 1 : 0
+  display_name = "${var.app_name} - health check failing"
+  project      = var.gcp_project_id
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Uptime check failing"
+
+    condition_threshold {
+      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${google_monitoring_uptime_check_config.health[0].uptime_check_id}\" AND resource.type=\"uptime_url\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 1
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields      = ["resource.*"]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = local.alert_channels
 }
 
 # IAM: Allow Cloud Run service account to receive budget alerts

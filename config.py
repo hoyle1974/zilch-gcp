@@ -46,6 +46,7 @@ class ZilchConfig(BaseModel):
     enable_monitoring: bool = False
     billing_account_name: str = "My Billing Account"
     billing_budget_limit_usd: str = "10"
+    alert_email: str = ""  # optional: also email monitoring alerts here
 
     # Phase 5: MySQL
     enable_mysql: bool = False
@@ -200,7 +201,8 @@ class ZilchConfig(BaseModel):
             f.write(f"scheduler_endpoint={self.scheduler_endpoint}\n")
             f.write(f"enable_monitoring={str(self.enable_monitoring).lower()}\n")
             f.write(f"billing_account_name={self.billing_account_name}\n")
-            f.write(f"billing_budget_limit_usd={self.billing_budget_limit_usd}\n\n")
+            f.write(f"billing_budget_limit_usd={self.billing_budget_limit_usd}\n")
+            f.write(f"alert_email={self.alert_email}\n\n")
 
             f.write("# Phase 5: MySQL Database (optional)\n")
             f.write(f"enable_mysql={str(self.enable_mysql).lower()}\n")
@@ -242,6 +244,7 @@ class ZilchConfig(BaseModel):
             "enable_monitoring": self.enable_monitoring,
             "billing_account_name": self.billing_account_name,
             "billing_budget_limit_usd": self.billing_budget_limit_usd,
+            "alert_email": self.alert_email,
             "enable_mysql": self.enable_mysql,
             "mysql_database_name": self.mysql_database_name,
             "allow_unauthenticated_access": self.allow_unauthenticated_access,

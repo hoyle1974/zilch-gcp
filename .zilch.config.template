@@ -129,6 +129,9 @@
 # Cost: Free tier included
 # enable_monitoring=false
 
+# Optional: also email monitoring alerts to this address (default: Pub/Sub channel only)
+# alert_email=you@example.com
+
 # Monthly billing budget alert threshold (USD)
 # billing_budget_limit_usd=10
 

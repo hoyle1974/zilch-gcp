@@ -637,7 +637,11 @@ resource "google_firestore_database" "default" {
   # All three US regions (us-central1, us-east1, us-west1) map to nam5
   location_id = "nam5"
   type        = "FIRESTORE_NATIVE"
-  depends_on  = [google_project_service.firestore]
+  # Point-in-time recovery (7 days of undo for a bad write). Stated here so an apply
+  # keeps it on: it is the safety net for a single-user datastore with no other backup
+  # besides the scheduled ones. Costs a little storage.
+  point_in_time_recovery_enablement = "POINT_IN_TIME_RECOVERY_ENABLED"
+  depends_on                        = [google_project_service.firestore]
 }
 
 resource "google_project_iam_member" "firestore" {

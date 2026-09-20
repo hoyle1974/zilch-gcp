@@ -213,3 +213,9 @@ variable "mysql_disk_size_gb" {
     error_message = "Disk size must be between 10 GB and 1000 GB."
   }
 }
+
+variable "alert_email" {
+  description = "Optional: also email monitoring alerts to this address (empty = Pub/Sub channel only)"
+  type        = string
+  default     = ""
+}
