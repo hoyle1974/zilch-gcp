@@ -21,3 +21,9 @@ main.tf: the Cloud Run service now ignores changes to its container env as well 
 ## [2026-09-20] update | Firestore PITR pinned; monitoring gets a real 5xx alert, an uptime check and optional email
 
 main.tf: `google_firestore_database.default` now states `point_in_time_recovery_enablement = ENABLED`, because an apply would otherwise have switched off a hand-enabled PITR on the `now` project (found by `terraform plan`). cloud_monitoring.tf: `cloud_run_errors` now alerts on more than 3 5xx responses in 5 minutes (it used to alert on request count and never fired), plus a `<app>-health` uptime check on `/health` and a "health check failing" policy; new optional `alert_email` (config.py, variables.tf, template) adds an email notification channel. `terraform validate` passes; a plan against the `now` project shows 2 to add, 1 to change, 0 to destroy. Pre-existing: 11 tests in tests/ fail before and after this change.
+
+---
+
+## [2026-09-20] update | Ignore gcloud client fields on the Cloud Run service
+
+main.tf: `client` and `client_version` (set by `gcloud run deploy`) are added to `ignore_changes`; after the `now` app was deployed into the zilch-managed service, a plan wanted to null them. Applied the monitoring changes from 1f76d72 to the `now` project; plan is clean.
